@@ -29,8 +29,15 @@ export default function Navbar() {
     setInfoLoading(true)
     setInfoError('')
     try {
-      const res = await fetch('/api/user/me', { headers: { 'x-session-id': user?.uid } })
-      const data = await res.json()
+      if (!user) throw new Error('Not authenticated');
+      const token = await user.getIdToken();
+      const res = await fetch('/api/user/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json();
       if (data.success) {
         setInfoForm({
           age: data.user.age ? String(data.user.age) : '',
@@ -64,11 +71,13 @@ export default function Navbar() {
     setInfoError('')
     setInfoSuccess('')
     try {
+      if (!user) throw new Error('Not authenticated');
+      const token = await user.getIdToken();
       const res = await fetch('/api/user/me', {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'x-session-id': user?.uid
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           age: infoForm.age ? Number(infoForm.age) : undefined,

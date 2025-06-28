@@ -9,11 +9,11 @@ const router = express.Router()
 router.post('/', validateUserPreferences, async (req: Request, res: Response): Promise<void> => {
   try {
     const preferences = req.body
-    const sessionId = uuidv4()
+    const uid = uuidv4() // For anonymous matchmaking, generate a temp uid
 
     // Create or update user session
     const user = new User({
-      sessionId,
+      uid,
       preferences,
       isSearching: true,
       lastActive: new Date()
@@ -22,7 +22,7 @@ router.post('/', validateUserPreferences, async (req: Request, res: Response): P
     await user.save()
 
     // Find potential matches
-    const matches = await User.findMatches(preferences, sessionId)
+    const matches = await User.findMatches(preferences, uid)
 
     if (matches.length > 0) {
       // Find the best match (first one for now, could implement scoring algorithm)
@@ -40,21 +40,21 @@ router.post('/', validateUserPreferences, async (req: Request, res: Response): P
       res.json({
         success: true,
         match: {
-          id: bestMatch.sessionId,
-          name: `Debater ${bestMatch.sessionId.slice(0, 8)}`,
+          id: bestMatch.uid,
+          name: `Debater ${bestMatch.uid.slice(0, 8)}`,
           ageRange: bestMatch.preferences.ageRange,
           country: bestMatch.preferences.country,
           university: bestMatch.preferences.university,
           matchScore
         },
-        sessionId
+        uid
       })
     } else {
       // No match found, keep user in searching state
       res.json({
         success: true,
         match: null,
-        sessionId
+        uid
       })
     }
   } catch (error) {
@@ -66,12 +66,12 @@ router.post('/', validateUserPreferences, async (req: Request, res: Response): P
   }
 })
 
-// PUT /api/matchmaking/:sessionId/active - Update user activity
-router.put('/:sessionId/active', async (req: Request, res: Response): Promise<void> => {
+// PUT /api/matchmaking/:uid/active - Update user activity
+router.put('/:uid/active', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { sessionId } = req.params
+    const { uid } = req.params
 
-    const user = await User.findOne({ sessionId })
+    const user = await User.findOne({ uid })
     if (!user) {
       res.status(404).json({
         success: false,
@@ -96,12 +96,12 @@ router.put('/:sessionId/active', async (req: Request, res: Response): Promise<vo
   }
 })
 
-// DELETE /api/matchmaking/:sessionId - End user session
-router.delete('/:sessionId', async (req: Request, res: Response): Promise<void> => {
+// DELETE /api/matchmaking/:uid - End user session
+router.delete('/:uid', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { sessionId } = req.params
+    const { uid } = req.params
 
-    const user = await User.findOne({ sessionId })
+    const user = await User.findOne({ uid })
     if (!user) {
       res.status(404).json({
         success: false,

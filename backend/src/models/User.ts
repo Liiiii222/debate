@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema, Model } from 'mongoose'
 
 export interface IUser extends Document {
-  sessionId: string
+  uid: string // Firebase UID, required
   // Persistent profile info fields
   age?: number
   country?: string
@@ -22,12 +22,12 @@ export interface IUser extends Document {
 }
 
 export interface IUserModel extends Model<IUser> {
-  findMatches(preferences: any, excludeSessionId: string): Promise<IUser[]>
+  findMatches(preferences: any, excludeUid: string): Promise<IUser[]>
   cleanupInactive(): Promise<any>
 }
 
 const userSchema = new Schema<IUser>({
-  sessionId: {
+  uid: {
     type: String,
     required: true,
     unique: true
@@ -96,11 +96,11 @@ userSchema.methods.updateLastActive = function(): void {
 }
 
 // Static method to find potential matches
-userSchema.statics.findMatches = function(preferences: any, excludeSessionId: string): Promise<IUser[]> {
+userSchema.statics.findMatches = function(preferences: any, excludeUid: string): Promise<IUser[]> {
   const { category, topic, ageRange, language, country, university } = preferences
   
   const matchQuery: any = {
-    sessionId: { $ne: excludeSessionId },
+    uid: { $ne: excludeUid },
     isSearching: true,
     'preferences.category': category,
     'preferences.topic': topic,

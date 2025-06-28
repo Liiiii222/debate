@@ -194,8 +194,14 @@ export default function ProfilePage() {
   // Load persistent user info from API
   useEffect(() => {
     const fetchPersistentInfo = async () => {
-      // Always use demo-user for local testing
-      const res = await fetch('/api/user/me', { headers: { 'x-session-id': 'demo-user' } });
+      if (!user) return;
+      const token = await user.getIdToken();
+      const res = await fetch('/api/user/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       const data = await res.json();
       if (data.success) {
         setPersistentInfo({
@@ -206,7 +212,7 @@ export default function ProfilePage() {
       }
     };
     fetchPersistentInfo();
-  }, []);
+  }, [user]);
 
   const loadUserProfile = async () => {
     if (!user) return;
