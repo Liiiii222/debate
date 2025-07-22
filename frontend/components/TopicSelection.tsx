@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface Topic {
   id: string
@@ -9,6 +12,7 @@ interface Topic {
   category: string
   source: 'external' | 'user' | 'popular'
   trending?: boolean
+  createdBy?: string; // Added for user-created topics
 }
 
 interface TopicSelectionProps {
@@ -18,6 +22,7 @@ interface TopicSelectionProps {
 }
 
 export default function TopicSelection({ category, onTopicSelect, onBack }: TopicSelectionProps) {
+  const { user } = useAuth();
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
   const [newTopic, setNewTopic] = useState('')
@@ -147,6 +152,35 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
     }
   }
 
+  const handleDeleteTopic = async (topicId: string) => {
+    if (!user) return;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/topics/${topicId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await user.getIdToken()}` }
+      });
+      setTopics(prev => prev.filter(t => t.id !== topicId));
+    } catch (err) {
+      alert('Failed to delete topic.');
+    }
+  };
+
+  const handleReportTopic = async (topicId: string, reason: 'inappropriate' | 'gibberish') => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'reports'), {
+        type: 'topic',
+        itemId: topicId,
+        reason,
+        reportedBy: user.uid,
+        timestamp: serverTimestamp(),
+      });
+      alert('Report submitted. Thank you!');
+    } catch (err) {
+      alert('Failed to submit report.');
+    }
+  };
+
   const trendingTopics = topics.filter(topic => topic.trending)
   const popularTopics = topics.filter(topic => topic.source === 'popular' && !topic.trending)
   const userTopics = topics.filter(topic => topic.source === 'user')
@@ -275,16 +309,25 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {userTopics.map((topic) => (
-              <motion.button
-                key={topic.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onTopicSelect(topic.name)}
-                className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
-              >
-                <h3 className="font-semibold text-lg">{topic.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">User created</p>
-              </motion.button>
+              <motion.div key={topic.id} className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onTopicSelect(topic.name)}
+                  className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
+                >
+                  <h3 className="font-semibold text-lg">{topic.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">User created</p>
+                </motion.button>
+                {user && topic.createdBy === user.uid ? (
+                  <button onClick={() => handleDeleteTopic(topic.id)} className="absolute top-2 right-2 text-red-600 hover:text-red-800 text-xs font-bold">Delete</button>
+                ) : (
+                  <div className="absolute top-2 right-2 flex flex-col gap-1">
+                    <button onClick={() => handleReportTopic(topic.id, 'inappropriate')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as inappropriate</button>
+                    <button onClick={() => handleReportTopic(topic.id, 'gibberish')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as gibberish</button>
+                  </div>
+                )}
+              </motion.div>
             ))}
           </div>
         </motion.div>

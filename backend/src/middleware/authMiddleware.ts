@@ -10,10 +10,16 @@ declare global {
   }
 }
 
-export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
+// Export AuthenticatedRequest type
+export interface AuthenticatedRequest extends Request {
+  user?: { uid: string };
+}
+
+export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Missing or invalid Authorization header' });
+    res.status(401).json({ success: false, error: 'Missing or invalid Authorization header' });
+    return;
   }
   const idToken = authHeader.split(' ')[1];
   try {
@@ -21,6 +27,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     req.user = { uid: decodedToken.uid };
     next();
   } catch (error) {
-    return res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    res.status(401).json({ success: false, error: 'Invalid or expired token' });
+    return;
   }
 } 

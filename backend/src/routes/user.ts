@@ -1,62 +1,48 @@
-import { Request, Response, NextFunction, Router } from 'express';
-import User from '../models/User';
-import { authMiddleware } from '../middleware/authMiddleware';
+import express, { Request, Response } from 'express';
+import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
+import { authMiddleware, AuthenticatedRequest } from '../middleware/authMiddleware';
 
-const router = Router();
-
-// Extend Request type to include user
-interface AuthenticatedRequest extends Request {
-  user?: { uid: string };
-}
-
-// GET /api/user/me
-router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ success: false, error: 'Unauthorized: user missing' });
-  }
-  const { uid } = req.user;
-  console.log('Decoded UID:', uid);
-  const user = await User.findOne({ uid });
-  console.log('Fetched user:', user);
-  if (!user) {
-    console.log('No profile found, returning 404');
-    return res.status(404).json({ success: false, error: 'Profile not found' });
-  }
-  const response = {
-    success: true,
-    user: {
-      age: user.age ?? null,
-      country: user.country ?? null,
-      language: user.language ?? null
-    }
-  };
-  console.log('GET /api/user/me response:', response);
-  return res.status(200).json(response);
-});
-
-// PUT /api/user/me
-router.put('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ success: false, error: 'Unauthorized: user missing' });
-  }
-  const { uid } = req.user;
-  let user = await User.findOne({ uid });
-  if (!user) {
-    user = await User.create({ uid });
-  }
-  const { age, country, language } = req.body;
-  if (age !== undefined) user.age = age;
-  if (country !== undefined) user.country = country;
-  if (language !== undefined) user.language = language;
-  await user.save();
-  return res.status(200).json({
-    success: true,
-    user: {
-      age: user.age ?? null,
-      country: user.country ?? null,
-      language: user.language ?? null
-    }
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
   });
+}
+const db = getFirestore();
+
+const router = express.Router();
+
+// GET /api/user/me - Get current user's profile
+router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user?.uid) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    const userDoc = await db.collection('users').doc(req.user.uid).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    return res.json(userDoc.data());
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-export default router; 
+// PUT /api/user/me - Update current user's profile
+router.put('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user?.uid) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+    const updateData = req.body;
+    await db.collection('users').doc(req.user.uid).set(updateData, { merge: true });
+    const userDoc = await db.collection('users').doc(req.user.uid).get();
+    return res.json(userDoc.data());
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;

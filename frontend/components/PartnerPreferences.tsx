@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 const COUNTRIES = [
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
@@ -140,6 +141,15 @@ function SearchableDropdown({ options, selectedValues, onSelectionChange, placeh
   );
 }
 
+interface Friend {
+  uid: string;
+  name: string;
+  age?: number;
+  country?: string;
+  languages: string[];
+  profileImage?: string;
+}
+
 interface PartnerPreferencesProps {
   onPreferencesSubmit: (preferences: {
     ageRange: string;
@@ -153,6 +163,7 @@ interface PartnerPreferencesProps {
 }
 
 export default function PartnerPreferences({ onPreferencesSubmit, onBack }: PartnerPreferencesProps) {
+  const { user } = useAuth();
   const [preferences, setPreferences] = useState({
     ageRange: "Any age",
     languages: [] as string[],
@@ -162,8 +173,8 @@ export default function PartnerPreferences({ onPreferencesSubmit, onBack }: Part
     debateFormats: [] as string[],
   });
   const [invitedFriend, setInvitedFriend] = useState<string>("");
-  // Placeholder for mutual friends (to be fetched from backend in the future)
-  const mutualFriends: { id: string; username: string }[] = [];
+  const [mutualFriends, setMutualFriends] = useState<Friend[]>([]);
+  const [loadingFriends, setLoadingFriends] = useState(true);
 
   const ageRanges = [
     "14-17",
@@ -233,6 +244,35 @@ export default function PartnerPreferences({ onPreferencesSubmit, onBack }: Part
 
   const isFormValid = preferences.debateFormats.length > 0;
 
+  // Load mutual friends
+  useEffect(() => {
+    const loadFriends = async () => {
+      if (!user) return;
+
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/me/friends`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setMutualFriends(data.friends || []);
+        } else {
+          console.error('Failed to load friends:', response.statusText);
+        }
+      } catch (error) {
+        console.error('Error loading friends:', error);
+      } finally {
+        setLoadingFriends(false);
+      }
+    };
+
+    loadFriends();
+  }, [user]);
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -249,7 +289,11 @@ export default function PartnerPreferences({ onPreferencesSubmit, onBack }: Part
             <label htmlFor="inviteFriend" className="block text-sm font-medium text-gray-700 mb-2">
               Invite a Friend
             </label>
-            {mutualFriends.length === 0 ? (
+            {loadingFriends ? (
+              <div className="text-gray-500 text-sm py-2 px-3 bg-gray-100 rounded">
+                Loading friends...
+              </div>
+            ) : mutualFriends.length === 0 ? (
               <div className="text-gray-500 text-sm py-2 px-3 bg-gray-100 rounded">
                 You have no friends yet
               </div>
@@ -262,8 +306,8 @@ export default function PartnerPreferences({ onPreferencesSubmit, onBack }: Part
               >
                 <option value="">Select a friend to invite</option>
                 {mutualFriends.map((friend) => (
-                  <option key={friend.id} value={friend.id}>
-                    {friend.username}
+                  <option key={friend.uid} value={friend.uid}>
+                    {friend.name}
                   </option>
                 ))}
               </select>

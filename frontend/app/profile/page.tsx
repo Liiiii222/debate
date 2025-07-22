@@ -164,15 +164,15 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [profileLoading, setProfileLoading] = useState(true);
-  // Persistent info state
+  
+  // Persistent info state with loading and error handling
   const [persistentInfo, setPersistentInfo] = useState<{age?: number, country?: string, language?: string}>({});
+  const [loadingPersistentInfo, setLoadingPersistentInfo] = useState(true);
+  const [errorPersistentInfo, setErrorPersistentInfo] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
     name: "",
-    age: "",
-    country: "",
-    languages: [] as string[],
     bio: "",
     profileImage: ""
   });
@@ -191,17 +191,76 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  // Load persistent user info from API
+  // Load persistent user info from API with proper loading and error handling
   useEffect(() => {
     const fetchPersistentInfo = async () => {
       if (!user) return;
+      
+      setLoadingPersistentInfo(true);
+      setErrorPersistentInfo(null);
+      
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/me`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (!res.ok) {
+          if (res.status === 404) {
+            // User doesn't exist in MongoDB yet, this is normal for new users
+            setPersistentInfo({});
+            return;
+          }
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const data = await res.json();
+        if (data.success) {
+          setPersistentInfo({
+            age: data.user.age,
+            country: data.user.country,
+            language: data.user.language
+          });
+        } else {
+          throw new Error(data.error || 'Failed to load user info');
+        }
+      } catch (err) {
+        console.error('Error fetching persistent info:', err);
+        setErrorPersistentInfo(err instanceof Error ? err.message : 'Error fetching user info');
+      } finally {
+        setLoadingPersistentInfo(false);
+      }
+    };
+    fetchPersistentInfo();
+  }, [user]);
+
+  // Function to retry loading persistent info
+  const retryPersistentInfo = async () => {
+    if (!user) return;
+    
+    setLoadingPersistentInfo(true);
+    setErrorPersistentInfo(null);
+    
+    try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/user/me', {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/me`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
+      
+      if (!res.ok) {
+        if (res.status === 404) {
+          setPersistentInfo({});
+          return;
+        }
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const data = await res.json();
       if (data.success) {
         setPersistentInfo({
@@ -209,10 +268,16 @@ export default function ProfilePage() {
           country: data.user.country,
           language: data.user.language
         });
+      } else {
+        throw new Error(data.error || 'Failed to load user info');
       }
-    };
-    fetchPersistentInfo();
-  }, [user]);
+    } catch (err) {
+      console.error('Error retrying persistent info:', err);
+      setErrorPersistentInfo(err instanceof Error ? err.message : 'Error fetching user info');
+    } finally {
+      setLoadingPersistentInfo(false);
+    }
+  };
 
   const loadUserProfile = async () => {
     if (!user) return;
@@ -224,9 +289,6 @@ export default function ProfilePage() {
         setProfile(userData);
         setFormData({
           name: userData.name || "",
-          age: userData.age ? userData.age.toString() : "",
-          country: userData.country || "",
-          languages: userData.languages || [],
           bio: userData.bio || "",
           profileImage: userData.profileImage || ""
         });
@@ -248,9 +310,6 @@ export default function ProfilePage() {
     try {
       const updatedData = {
         name: formData.name.trim(),
-        age: formData.age ? Number(formData.age) : null,
-        country: formData.country || null,
-        languages: formData.languages,
         bio: formData.bio.trim(),
         profileImage: formData.profileImage || profile.profileImage,
         updatedAt: new Date()
@@ -280,9 +339,6 @@ export default function ProfilePage() {
     if (profile) {
       setFormData({
         name: profile.name || "",
-        age: profile.age ? profile.age.toString() : "",
-        country: profile.country || "",
-        languages: profile.languages || [],
         bio: profile.bio || "",
         profileImage: profile.profileImage || ""
       });
@@ -290,40 +346,6 @@ export default function ProfilePage() {
     setIsEditing(false);
     setError("");
   };
-
-  if (loading || profileLoading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-lg shadow-lg p-8">
-              <div className="animate-pulse">
-                <div className="h-32 bg-gray-200 rounded-lg mb-4"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/3 mb-2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user || !profile) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-              <p className="text-gray-600">Profile not found</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -335,37 +357,78 @@ export default function ProfilePage() {
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center space-x-4">
                 <div className="w-24 h-24 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center overflow-hidden">
-                  {profile.profileImage ? (
+                  {profileLoading || loadingPersistentInfo ? (
+                    <div className="animate-pulse w-full h-full bg-gray-300" />
+                  ) : errorPersistentInfo || !profile?.profileImage ? (
+                    <span className="text-gray-400 text-3xl font-bold">
+                      {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                    </span>
+                  ) : (
                     <img 
                       src={profile.profileImage} 
                       alt={profile.name || 'Profile'} 
                       className="w-full h-full object-cover"
                     />
-                  ) : (
-                    <span className="text-gray-400 text-3xl font-bold">
-                      {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-                    </span>
                   )}
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{profile.name}</h1>
-                  <p className="text-gray-600">{profile.email}</p>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {profileLoading || loadingPersistentInfo ? (
+                      <span className="animate-pulse bg-gray-200 rounded w-24 h-6 inline-block" />
+                    ) : errorPersistentInfo || !profile?.name ? (
+                      'N/A'
+                    ) : (
+                      profile.name
+                    )}
+                  </h1>
+                  <p className="text-gray-600">
+                    {profileLoading || loadingPersistentInfo ? (
+                      <span className="animate-pulse bg-gray-200 rounded w-32 h-4 inline-block" />
+                    ) : errorPersistentInfo || !profile?.email ? (
+                      'N/A'
+                    ) : (
+                      profile.email
+                    )}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsEditing(!isEditing)}
                 className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
+                disabled={profileLoading || loadingPersistentInfo}
               >
                 {isEditing ? "Cancel" : "Edit"}
               </button>
             </div>
 
+            {/* Error banner for persistent info */}
+            {errorPersistentInfo && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded flex flex-col items-center">
+                <span>Failed to load user information</span>
+                <span className="text-xs mt-1">{errorPersistentInfo}</span>
+                <button
+                  onClick={retryPersistentInfo}
+                  disabled={loadingPersistentInfo}
+                  className="mt-2 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50"
+                >
+                  {loadingPersistentInfo ? 'Retrying...' : 'Try Again'}
+                </button>
+              </div>
+            )}
+
+            {/* Error banner for profile update */}
             {error && (
               <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
                 {error}
               </div>
             )}
 
+            {/* Profile not found fallback */}
+            {!profile && !profileLoading && !loadingPersistentInfo && !errorPersistentInfo && (
+              <div className="text-center text-gray-600 mb-4">Profile not found</div>
+            )}
+
+            {/* Main content: Edit form or display mode */}
             {isEditing ? (
               /* Edit Form */
               <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
@@ -379,39 +442,6 @@ export default function ProfilePage() {
                     required
                   />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
-                  <input
-                    type="number"
-                    value={formData.age}
-                    onChange={(e) => setFormData(prev => ({ ...prev, age: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    min="1"
-                    max="120"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
-                  <SearchableDropdown
-                    options={COUNTRIES}
-                    selectedValues={formData.country ? [formData.country] : []}
-                    onSelectionChange={(values) => setFormData(prev => ({ ...prev, country: values[0] || "" }))}
-                    placeholder="Select country"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Languages</label>
-                  <SearchableDropdown
-                    options={LANGUAGES}
-                    selectedValues={formData.languages}
-                    onSelectionChange={(values) => setFormData(prev => ({ ...prev, languages: values }))}
-                    placeholder="Select languages"
-                  />
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
                   <textarea
@@ -422,7 +452,6 @@ export default function ProfilePage() {
                     placeholder="Tell us about yourself..."
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Profile Image URL</label>
                   <input
@@ -433,7 +462,6 @@ export default function ProfilePage() {
                     placeholder="https://example.com/image.jpg"
                   />
                 </div>
-
                 <div className="flex justify-end space-x-3">
                   <button
                     type="button"
@@ -454,32 +482,60 @@ export default function ProfilePage() {
             ) : (
               /* Display Mode */
               <div className="space-y-4">
-                {profile.bio && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Bio</h3>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Bio</h3>
+                  {profileLoading || loadingPersistentInfo ? (
+                    <div className="animate-pulse h-6 bg-gray-200 rounded w-1/2" />
+                  ) : errorPersistentInfo || !profile?.bio ? (
+                    <span className="text-gray-400">N/A</span>
+                  ) : (
                     <p className="text-gray-700">{profile.bio}</p>
-                  </div>
-                )}
+                  )}
+                </div>
                 {/* Persistent Info Display */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Age</h3>
-                    <p className="text-gray-900">{persistentInfo.age !== undefined && persistentInfo.age !== null ? persistentInfo.age : 'Not provided'}</p>
+                    {profileLoading || loadingPersistentInfo ? (
+                      <div className="animate-pulse h-4 bg-gray-200 rounded w-10" />
+                    ) : errorPersistentInfo || persistentInfo.age === undefined || persistentInfo.age === null ? (
+                      <span className="text-gray-400">N/A</span>
+                    ) : (
+                      <p className="text-gray-900">{persistentInfo.age}</p>
+                    )}
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Country</h3>
-                    <p className="text-gray-900">{persistentInfo.country ? persistentInfo.country : 'Not provided'}</p>
+                    {profileLoading || loadingPersistentInfo ? (
+                      <div className="animate-pulse h-4 bg-gray-200 rounded w-20" />
+                    ) : errorPersistentInfo || !persistentInfo.country ? (
+                      <span className="text-gray-400">N/A</span>
+                    ) : (
+                      <p className="text-gray-900">{persistentInfo.country}</p>
+                    )}
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Language</h3>
-                    <p className="text-gray-900">{persistentInfo.language ? persistentInfo.language : 'Not provided'}</p>
+                    {profileLoading || loadingPersistentInfo ? (
+                      <div className="animate-pulse h-4 bg-gray-200 rounded w-20" />
+                    ) : errorPersistentInfo || !persistentInfo.language ? (
+                      <span className="text-gray-400">N/A</span>
+                    ) : (
+                      <p className="text-gray-900">{persistentInfo.language}</p>
+                    )}
                   </div>
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
-                  <p className="text-sm text-gray-500">
-                    Member since {profile.createdAt.toDate().toLocaleDateString()}
-                  </p>
+                  {profileLoading || loadingPersistentInfo ? (
+                    <div className="animate-pulse h-4 bg-gray-200 rounded w-32" />
+                  ) : errorPersistentInfo || !profile?.createdAt ? (
+                    <span className="text-gray-400">N/A</span>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      Member since {profile.createdAt.toDate().toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

@@ -53,7 +53,7 @@ export async function POST(req: Request) {
     while (retries <= maxRetries) {
       try {
         chatCompletion = await openai.chat.completions.create({
-          model: 'gpt-3.5-turbo',
+          model: 'auto',
           messages: [
             { role: 'system', content: 'You are a helpful debate assistant bot.' },
             { role: 'user', content: prompt }
@@ -77,6 +77,14 @@ export async function POST(req: Request) {
           throw err;
         }
       }
+    }
+
+    if (!chatCompletion) {
+      console.error('❌ [BACKEND] Failed to get completion from OpenAI API after retries.');
+      return NextResponse.json(
+        { error: 'Failed to get AI response from OpenAI after retries' },
+        { status: 500 }
+      );
     }
 
     const openaiEndTime = Date.now();
@@ -109,12 +117,11 @@ export async function POST(req: Request) {
     const endTime = Date.now();
     console.error('❌ [BACKEND] Error in /api/ask-ai after', endTime - startTime, 'ms:', error);
     console.error('❌ [BACKEND] Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
+      name: (error as Error).name,
+      message: (error as Error).message,
+      stack: (error as Error).stack
     });
     
-    // Handle specific OpenAI errors
     if (error instanceof Error) {
       if (error.message.includes('401')) {
         console.error('❌ [BACKEND] OpenAI API key is invalid');
@@ -144,4 +151,4 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
-} 
+}

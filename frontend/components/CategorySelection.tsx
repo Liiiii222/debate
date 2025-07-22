@@ -2,12 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface Category {
   id: string
   name: string
   source: 'external' | 'user' | 'popular'
   trending?: boolean
+  createdBy?: string; // Added for user-created categories
 }
 
 interface CategorySelectionProps {
@@ -16,6 +20,7 @@ interface CategorySelectionProps {
 }
 
 export default function CategorySelection({ onCategorySelect, onBack }: CategorySelectionProps) {
+  const { user } = useAuth();
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [newCategory, setNewCategory] = useState('')
@@ -94,6 +99,35 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
       setShowAddForm(false)
     }
   }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    if (!user) return;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${await user.getIdToken()}` }
+      });
+      setCategories(prev => prev.filter(c => c.id !== categoryId));
+    } catch (err) {
+      alert('Failed to delete category.');
+    }
+  };
+
+  const handleReportCategory = async (categoryId: string, reason: 'inappropriate' | 'gibberish') => {
+    if (!user) return;
+    try {
+      await addDoc(collection(db, 'reports'), {
+        type: 'category',
+        itemId: categoryId,
+        reason,
+        reportedBy: user.uid,
+        timestamp: serverTimestamp(),
+      });
+      alert('Report submitted. Thank you!');
+    } catch (err) {
+      alert('Failed to submit report.');
+    }
+  };
 
   const trendingCategories = categories.filter(cat => cat.trending)
   const popularCategories = categories.filter(cat => cat.source === 'popular' && !cat.trending)
@@ -220,16 +254,25 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {userCategories.map((category) => (
-              <motion.button
-                key={category.id}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onCategorySelect(category.name)}
-                className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
-              >
-                <h3 className="font-semibold text-lg">{category.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">User created</p>
-              </motion.button>
+              <motion.div key={category.id} className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onCategorySelect(category.name)}
+                  className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
+                >
+                  <h3 className="font-semibold text-lg">{category.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">User created</p>
+                </motion.button>
+                {user && category.createdBy === user.uid ? (
+                  <button onClick={() => handleDeleteCategory(category.id)} className="absolute top-2 right-2 text-red-600 hover:text-red-800 text-xs font-bold">Delete</button>
+                ) : (
+                  <div className="absolute top-2 right-2 flex flex-col gap-1">
+                    <button onClick={() => handleReportCategory(category.id, 'inappropriate')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as inappropriate</button>
+                    <button onClick={() => handleReportCategory(category.id, 'gibberish')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as gibberish</button>
+                  </div>
+                )}
+              </motion.div>
             ))}
           </div>
         </motion.div>
