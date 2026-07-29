@@ -1,147 +1,137 @@
-"use client";
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { useRouter } from 'next/navigation';
+'use client'
 
-interface User {
-  uid: string;
-  name: string;
-  age?: number;
-  country?: string;
-  languages: string[];
-  profileImage?: string;
+import { useState, useRef, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
+import { useRouter } from 'next/navigation'
+import { MagnifyingGlassIcon } from '@heroicons/react/24/solid'
+
+interface UserResult {
+  uid: string
+  name: string
+  email: string
+  country: string
+  profilePicture: string
 }
 
-interface UserSearchProps {
-  placeholder?: string;
-  className?: string;
+function AvatarImg({ src, name }: { src: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  if (src && !failed) {
+    return <img src={src} alt={name} className="w-full h-full object-cover" onError={() => setFailed(true)} />
+  }
+  return (
+    <div className="w-full h-full flex items-center justify-center bg-gray-200 text-gray-500 text-xs font-semibold select-none">
+      {name?.charAt(0).toUpperCase() || '?'}
+    </div>
+  )
 }
 
-export default function UserSearch({ placeholder = "Search for users...", className = "" }: UserSearchProps) {
-  const { user } = useAuth();
-  const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+export default function UserSearch({ className = '' }: { className?: string }) {
+  const { user } = useAuth()
+  const router = useRouter()
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<UserResult[]>([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState('')
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setShowResults(false);
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false)
       }
-    };
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    const searchUsers = async () => {
-      if (!searchTerm.trim() || !user) {
-        setSearchResults([]);
-        setShowResults(false);
-        return;
+  const search = async (q: string) => {
+    if (!q.trim() || !user) { setResults([]); setOpen(false); return }
+    setLoading(true); setError('')
+    try {
+      const token = await user.getIdToken()
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/users/search?q=${encodeURIComponent(q.trim())}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Search failed')
+        setResults([])
+      } else {
+        setResults(data.users || [])
+        setOpen(true)
       }
+    } catch (err) {
+      setError('Could not reach the server')
+      setResults([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      setIsSearching(true);
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/search?q=${encodeURIComponent(searchTerm)}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const q = e.target.value
+    setQuery(q)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!q.trim()) { setResults([]); setOpen(false); return }
+    timerRef.current = setTimeout(() => search(q), 350)
+  }
 
-        if (response.ok) {
-          const data = await response.json();
-          setSearchResults(data.users || []);
-          setShowResults(true);
-        } else {
-          console.error('Search failed:', response.statusText);
-          setSearchResults([]);
-        }
-      } catch (error) {
-        console.error('Search error:', error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    };
-
-    const debounceTimer = setTimeout(searchUsers, 300);
-    return () => clearTimeout(debounceTimer);
-  }, [searchTerm, user]);
-
-  const handleUserClick = (user: User) => {
-    router.push(`/user/${user.uid}`);
-    setShowResults(false);
-    setSearchTerm('');
-  };
+  const handleSelect = (uid: string) => {
+    setOpen(false)
+    setQuery('')
+    setResults([])
+    router.push(`/profile/${uid}`)
+  }
 
   return (
-    <div ref={searchRef} className={`relative ${className}`}>
-      <input
-        type="text"
-        placeholder={placeholder}
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        onFocus={() => searchResults.length > 0 && setShowResults(true)}
-        className="w-full px-3 py-2 border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-400 text-gray-700 placeholder-gray-400 transition"
-        style={{ background: 'none', boxShadow: 'none' }}
-      />
-      
-      {isSearching && (
-        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
-        </div>
-      )}
+    <div ref={wrapperRef} className={`relative ${className}`}>
+      <div className="relative">
+        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <input
+          type="text"
+          value={query}
+          onChange={handleChange}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          placeholder="Search users..."
+          className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-400 transition"
+        />
+        {loading && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="w-3.5 h-3.5 border-2 border-gray-300 border-t-primary-500 rounded-full animate-spin" />
+          </div>
+        )}
+      </div>
 
-      {showResults && searchResults.length > 0 && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-          {searchResults.map((user) => (
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden">
+          {error && (
+            <div className="px-4 py-3 text-sm text-red-500">{error}</div>
+          )}
+          {!error && results.length === 0 && (
+            <div className="px-4 py-3 text-sm text-gray-400">No users found</div>
+          )}
+          {results.map(u => (
             <button
-              key={user.uid}
-              onClick={() => handleUserClick(user)}
-              className="w-full text-left px-4 py-3 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none border-b border-gray-100 last:border-b-0 flex items-center space-x-3"
+              key={u.uid}
+              onClick={() => handleSelect(u.uid)}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition text-left"
             >
-              <div className="w-10 h-10 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0">
-                {user.profileImage ? (
-                  <img 
-                    src={user.profileImage} 
-                    alt={user.name} 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-gray-400 text-sm font-bold">
-                    {user.name.charAt(0).toUpperCase()}
-                  </span>
-                )}
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                <AvatarImg src={u.profilePicture} name={u.name} />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-900 truncate">{user.name}</div>
-                <div className="text-sm text-gray-500 truncate">
-                  {user.age && `${user.age} years`}
-                  {user.age && user.country && ' • '}
-                  {user.country}
-                  {user.languages.length > 0 && (user.age || user.country) && ' • '}
-                  {user.languages.slice(0, 2).join(', ')}
-                  {user.languages.length > 2 && '...'}
-                </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{u.name || '(no name)'}</p>
+                {u.country && <p className="text-xs text-gray-400 truncate">{u.country}</p>}
               </div>
             </button>
           ))}
         </div>
       )}
-
-      {showResults && searchTerm.trim() && searchResults.length === 0 && !isSearching && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
-          <div className="px-4 py-3 text-gray-500 text-center">
-            No users found
-          </div>
-        </div>
-      )}
     </div>
-  );
-} 
+  )
+}

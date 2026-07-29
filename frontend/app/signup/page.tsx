@@ -388,7 +388,7 @@ export default function SignupPage() {
         {step === 2 && (
           <form onSubmit={handleStep2} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Age <span className="text-gray-400">(optional)</span></label>
+              <label className="block text-sm font-medium mb-1">Age <span className="text-gray-400">(recommended)</span></label>
               <input
                 type="number"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -401,7 +401,7 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Country <span className="text-gray-400">(optional)</span></label>
+              <label className="block text-sm font-medium mb-1">Country <span className="text-gray-400">(recommended)</span></label>
               <SearchableDropdown
                 options={COUNTRIES}
                 selectedValues={country ? [country] : []}
@@ -420,7 +420,7 @@ export default function SignupPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Languages <span className="text-gray-400">(optional)</span></label>
+              <label className="block text-sm font-medium mb-1">Languages <span className="text-gray-400">(recommended)</span></label>
               <SearchableDropdown
                 options={LANGUAGES}
                 selectedValues={languages}

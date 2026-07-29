@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Navbar from '@/components/Navbar'
 import CategorySelection from '@/components/CategorySelection'
 import TopicSelection from '@/components/TopicSelection'
@@ -10,14 +11,16 @@ import VideoDebatePage from '@/components/VideoDebatePage'
 import VoiceDebatePage from '@/components/VoiceDebatePage'
 import TextDebatePage from '@/components/TextDebatePage'
 
+const PhilosophyBackground = dynamic(() => import('@/components/PhilosophyBackground'), { ssr: false })
+
 export type AppStep = 'landing' | 'categories' | 'topics' | 'preferences' | 'matchmaking' | 'debate-video' | 'debate-voice' | 'debate-text'
 
 export type UserPreferences = {
   category: string
   topic: string
   ageRange: string
-  language: string
-  country: string
+  languages: string[]
+  countries: string[]
   university?: string
   debateFormats: string[]
 }
@@ -27,9 +30,9 @@ export default function Home() {
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     category: '',
     topic: '',
-    ageRange: '',
-    language: '',
-    country: '',
+    ageRange: 'Any age',
+    languages: [],
+    countries: [],
     university: '',
     debateFormats: []
   })
@@ -46,17 +49,17 @@ export default function Home() {
 
   const handlePreferencesSubmit = (preferences: Partial<UserPreferences>) => {
     setUserPreferences(prev => ({ ...prev, ...preferences }))
-    // Debate format priority: Video > Voice > Text
-    const formats = preferences.debateFormats || [];
-    let nextStep: AppStep = 'debate-text';
+    setCurrentStep('matchmaking')
+  }
+
+  const handleStartDebate = (formats: string[]) => {
     if (formats.includes('Video')) {
-      nextStep = 'debate-video';
+      setCurrentStep('debate-video')
     } else if (formats.includes('Voice')) {
-      nextStep = 'debate-voice';
-    } else if (formats.includes('Text')) {
-      nextStep = 'debate-text';
+      setCurrentStep('debate-voice')
+    } else {
+      setCurrentStep('debate-text')
     }
-    setCurrentStep(nextStep);
   }
 
   const handleBackToLanding = () => {
@@ -64,84 +67,91 @@ export default function Home() {
     setUserPreferences({
       category: '',
       topic: '',
-      ageRange: '',
-      language: '',
-      country: '',
+      ageRange: 'Any age',
+      languages: [],
+      countries: [],
       university: '',
       debateFormats: []
     })
   }
 
+  const isDebating = currentStep === 'debate-video' || currentStep === 'debate-voice' || currentStep === 'debate-text'
+  const isLanding = currentStep === 'landing'
+
   return (
-    <div className="scrollable-content bg-gray-50">
-      {!(currentStep === 'debate-video' || currentStep === 'debate-voice' || currentStep === 'debate-text') && <Navbar />}
-      
-      <main className="container mx-auto px-4 py-8">
-        {currentStep === 'preferences' ? (
-          <div className="w-full flex justify-center px-4 py-8">
-            <PartnerPreferences
-              onPreferencesSubmit={handlePreferencesSubmit}
-              onBack={() => setCurrentStep('topics')}
-            />
-          </div>
-        ) : (
-          <>
-        {currentStep === 'landing' && (
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="animate-fade-in">
-              <h1 className="text-6xl font-bold text-gray-900 mb-6">
-                Welcome to Debate
-              </h1>
-              <p className="text-xl text-gray-600 mb-8">
-                Connect with like-minded individuals for meaningful debates on trending topics
-              </p>
-              <button
-                onClick={() => setCurrentStep('categories')}
-                className="btn-primary text-lg px-8 py-3"
-              >
-                Choose a Category
-              </button>
-            </div>
-          </div>
-        )}
+    <div className="scrollable-content" style={{ background: isLanding ? '#080810' : undefined }}
+      {...(!isLanding && { className: 'scrollable-content bg-gray-50' })}>
 
-        {currentStep === 'categories' && (
-          <CategorySelection
-            onCategorySelect={handleCategorySelect}
-            onBack={handleBackToLanding}
-          />
-        )}
+      {/* Bust background — landing only */}
+      {isLanding && <PhilosophyBackground />}
 
-        {currentStep === 'topics' && (
-          <TopicSelection
-            category={userPreferences.category}
-            onTopicSelect={handleTopicSelect}
-            onBack={() => setCurrentStep('categories')}
-          />
-        )}
+      {/* Subtle gradient over bust so text is readable */}
+      {isLanding && (
+        <div className="fixed inset-0 pointer-events-none" style={{
+          background: 'linear-gradient(to bottom, rgba(8,8,16,0.55) 0%, rgba(8,8,16,0.15) 40%, rgba(8,8,16,0.7) 100%)',
+          zIndex: 1
+        }} />
+      )}
 
-        {currentStep === 'matchmaking' && (
-          <Matchmaking
-            userPreferences={userPreferences}
-            onBack={handleBackToLanding}
-                onStartDebate={() => setCurrentStep('debate-video')}
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        {!isDebating && <Navbar />}
+
+        <main className="container mx-auto px-4 py-8">
+          {currentStep === 'preferences' ? (
+            <div className="w-full flex justify-center px-4 py-8">
+              <PartnerPreferences
+                onPreferencesSubmit={handlePreferencesSubmit}
+                onBack={() => setCurrentStep('topics')}
               />
-            )}
+            </div>
+          ) : (
+            <>
+              {currentStep === 'landing' && (
+                <div className="max-w-4xl mx-auto text-center" style={{ paddingTop: '30vh' }}>
+                  <div className="animate-fade-in">
+                    <h1 className="text-6xl font-bold mb-6" style={{ color: '#ffffff' }}>
+                      Welcome to Debate
+                    </h1>
+                    <p className="text-xl mb-8" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      Connect with like-minded individuals for meaningful debates on trending topics
+                    </p>
+                    <button
+                      onClick={() => setCurrentStep('categories')}
+                      className="btn-primary text-lg px-8 py-3"
+                    >
+                      Choose a Category
+                    </button>
+                  </div>
+                </div>
+              )}
 
-            {currentStep === 'debate-video' && (
-              <VideoDebatePage userPreferences={userPreferences} />
-            )}
+              {currentStep === 'categories' && (
+                <CategorySelection onCategorySelect={handleCategorySelect} onBack={handleBackToLanding} />
+              )}
 
-            {currentStep === 'debate-voice' && (
-              <VoiceDebatePage userPreferences={userPreferences} />
-            )}
+              {currentStep === 'topics' && (
+                <TopicSelection
+                  category={userPreferences.category}
+                  onTopicSelect={handleTopicSelect}
+                  onBack={() => setCurrentStep('categories')}
+                />
+              )}
 
-            {currentStep === 'debate-text' && (
-              <TextDebatePage userPreferences={userPreferences} />
-            )}
-          </>
-        )}
-      </main>
+              {currentStep === 'matchmaking' && (
+                <Matchmaking
+                  userPreferences={userPreferences}
+                  onBack={handleBackToLanding}
+                  onStartDebate={() => handleStartDebate(userPreferences.debateFormats)}
+                />
+              )}
+
+              {currentStep === 'debate-video' && <VideoDebatePage userPreferences={userPreferences} />}
+              {currentStep === 'debate-voice' && <VoiceDebatePage userPreferences={userPreferences} />}
+              {currentStep === 'debate-text' && <TextDebatePage userPreferences={userPreferences} />}
+            </>
+          )}
+        </main>
+      </div>
     </div>
   )
-} 
+}

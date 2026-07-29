@@ -1,12 +1,15 @@
 import admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
+import serviceAccount from '../../firebase-service-account.json';
 
-// You can use GOOGLE_APPLICATION_CREDENTIALS env var or load from a JSON file
+// Initialize Firebase only once, even if this file gets imported multiple times
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    // Optionally, set databaseURL if using Realtime Database
-    // databaseURL: process.env.FIREBASE_DATABASE_URL,
+    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
   });
 }
 
-export default admin; 
+// Shared Firestore database connection, used across all route files
+export const db = getFirestore();
+
+export default admin;

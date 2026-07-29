@@ -1,18 +1,17 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Topic {
   id: string
   name: string
   category: string
-  source: 'external' | 'user' | 'popular'
+  source: 'default' | 'user' | 'external'
   trending?: boolean
-  createdBy?: string; // Added for user-created topics
+  usageCount?: number
+  createdBy?: string | null
 }
 
 interface TopicSelectionProps {
@@ -21,168 +20,192 @@ interface TopicSelectionProps {
   onBack: () => void
 }
 
+// Must match DELETE_PROTECTION_THRESHOLD in backend/src/routes/topics.ts
+const DELETE_PROTECTION_THRESHOLD = 10
+
+function usageLabel(count: number | undefined) {
+  const n = count || 0
+  return `Used in ${n} debate${n === 1 ? '' : 's'}`
+}
+
+// Small "..." menu shown on each user-added topic card
+function TopicMenu({
+  topic,
+  isOwner,
+  onDelete,
+  onReport
+}: {
+  topic: Topic
+  isOwner: boolean
+  onDelete: () => void
+  onReport: (reason: 'inappropriate' | 'gibberish') => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const canDelete = isOwner && (topic.usageCount || 0) < DELETE_PROTECTION_THRESHOLD
+
+  return (
+    <div ref={ref} className="absolute top-2 right-2">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+        className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        aria-label="More options"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-10 py-1">
+          {canDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }}
+              className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+            >
+              Delete topic
+            </button>
+          )}
+          {isOwner && !canDelete && (
+            <div className="px-3 py-2 text-xs text-gray-400">
+              Too many people use this to delete it
+            </div>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpen(false); onReport('inappropriate') }}
+            className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Report: inappropriate
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpen(false); onReport('gibberish') }}
+            className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Report: gibberish
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function TopicSelection({ category, onTopicSelect, onBack }: TopicSelectionProps) {
-  const { user } = useAuth();
+  const { user } = useAuth()
   const [topics, setTopics] = useState<Topic[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [newTopic, setNewTopic] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [addError, setAddError] = useState('')
 
   useEffect(() => {
     fetchTopics()
   }, [category])
 
   const fetchTopics = async () => {
+    setLoading(true)
+    setLoadError('')
     try {
-      setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/topics?category=${encodeURIComponent(category)}`)
-      if (response.ok) {
-        const data = await response.json()
+      const data = await response.json()
+      if (response.ok && data.success) {
         setTopics(data.topics)
       } else {
-        // Fallback to default topics based on category
-        const defaultTopics = getDefaultTopics(category)
-        setTopics(defaultTopics)
+        setLoadError(data.error || 'Failed to load topics')
+        setTopics([])
       }
     } catch (error) {
       console.error('Error fetching topics:', error)
-      // Fallback to default topics
-      const defaultTopics = getDefaultTopics(category)
-      setTopics(defaultTopics)
+      setLoadError('Could not reach the server. Please try again.')
+      setTopics([])
     } finally {
       setLoading(false)
     }
   }
 
-  const getDefaultTopics = (category: string): Topic[] => {
-    const topicMap: Record<string, Topic[]> = {
-      'Politics': [
-        { id: '1', name: 'Climate Change Policy', category, source: 'popular', trending: true },
-        { id: '2', name: 'Universal Basic Income', category, source: 'popular', trending: true },
-        { id: '3', name: 'Electoral Reform', category, source: 'popular' },
-        { id: '4', name: 'Immigration Policy', category, source: 'popular' },
-        { id: '5', name: 'Healthcare Reform', category, source: 'popular' },
-      ],
-      'Technology': [
-        { id: '6', name: 'Artificial Intelligence Ethics', category, source: 'popular', trending: true },
-        { id: '7', name: 'Social Media Regulation', category, source: 'popular', trending: true },
-        { id: '8', name: 'Cryptocurrency Future', category, source: 'popular' },
-        { id: '9', name: 'Privacy vs Security', category, source: 'popular' },
-        { id: '10', name: 'Remote Work Culture', category, source: 'popular' },
-      ],
-      'Environment': [
-        { id: '11', name: 'Renewable Energy Transition', category, source: 'popular', trending: true },
-        { id: '12', name: 'Plastic Pollution', category, source: 'popular', trending: true },
-        { id: '13', name: 'Carbon Tax Implementation', category, source: 'popular' },
-        { id: '14', name: 'Sustainable Agriculture', category, source: 'popular' },
-        { id: '15', name: 'Wildlife Conservation', category, source: 'popular' },
-      ],
-      'Healthcare': [
-        { id: '16', name: 'Universal Healthcare', category, source: 'popular', trending: true },
-        { id: '17', name: 'Mental Health Awareness', category, source: 'popular' },
-        { id: '18', name: 'Vaccine Mandates', category, source: 'popular' },
-        { id: '19', name: 'Alternative Medicine', category, source: 'popular' },
-        { id: '20', name: 'Healthcare Costs', category, source: 'popular' },
-      ],
-      'Education': [
-        { id: '21', name: 'Online vs Traditional Education', category, source: 'popular', trending: true },
-        { id: '22', name: 'Student Loan Forgiveness', category, source: 'popular' },
-        { id: '23', name: 'Standardized Testing', category, source: 'popular' },
-        { id: '24', name: 'Critical Race Theory', category, source: 'popular' },
-        { id: '25', name: 'School Choice', category, source: 'popular' },
-      ],
-      'Economy': [
-        { id: '26', name: 'Minimum Wage Increase', category, source: 'popular', trending: true },
-        { id: '27', name: 'Wealth Inequality', category, source: 'popular' },
-        { id: '28', name: 'Free Trade vs Protectionism', category, source: 'popular' },
-        { id: '29', name: 'Tax Reform', category, source: 'popular' },
-        { id: '30', name: 'Economic Recovery', category, source: 'popular' },
-      ],
-      'Social Issues': [
-        { id: '31', name: 'Gender Equality', category, source: 'popular', trending: true },
-        { id: '32', name: 'Racial Justice', category, source: 'popular' },
-        { id: '33', name: 'LGBTQ+ Rights', category, source: 'popular' },
-        { id: '34', name: 'Gun Control', category, source: 'popular' },
-        { id: '35', name: 'Religious Freedom', category, source: 'popular' },
-      ],
-      'Science': [
-        { id: '36', name: 'Space Exploration Funding', category, source: 'popular', trending: true },
-        { id: '37', name: 'Genetic Engineering', category, source: 'popular' },
-        { id: '38', name: 'Animal Testing', category, source: 'popular' },
-        { id: '39', name: 'Nuclear Energy', category, source: 'popular' },
-        { id: '40', name: 'Scientific Funding', category, source: 'popular' },
-      ],
-    }
-
-    return topicMap[category] || [
-      { id: 'default', name: 'General Discussion', category, source: 'popular' }
-    ]
-  }
-
   const handleAddTopic = async () => {
     if (!newTopic.trim()) return
+    if (!user) {
+      setAddError('You need to be logged in to add a topic.')
+      return
+    }
+    setAddError('')
 
     try {
+      const token = await user.getIdToken()
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/topics`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ name: newTopic, category }),
+        body: JSON.stringify({ name: newTopic.trim(), category }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
+      const data = await response.json()
+      if (response.ok && data.success) {
         setTopics(prev => [...prev, data.topic])
         setNewTopic('')
         setShowAddForm(false)
+      } else {
+        setAddError(data.error || 'Failed to add topic')
       }
     } catch (error) {
       console.error('Error adding topic:', error)
-      // Add locally if API fails
-      const newTopicItem: Topic = {
-        id: Date.now().toString(),
-        name: newTopic,
-        category,
-        source: 'user'
-      }
-      setTopics(prev => [...prev, newTopicItem])
-      setNewTopic('')
-      setShowAddForm(false)
+      setAddError('Could not reach the server. Please try again.')
     }
   }
 
   const handleDeleteTopic = async (topicId: string) => {
-    if (!user) return;
+    if (!user) return
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/topics/${topicId}`, {
+      const token = await user.getIdToken()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/topics/${topicId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${await user.getIdToken()}` }
-      });
-      setTopics(prev => prev.filter(t => t.id !== topicId));
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await response.json()
+      if (response.ok && data.success) {
+        setTopics(prev => prev.filter(t => t.id !== topicId))
+      } else {
+        alert(data.error || 'Failed to delete topic.')
+      }
     } catch (err) {
-      alert('Failed to delete topic.');
+      alert('Failed to delete topic.')
     }
-  };
+  }
 
   const handleReportTopic = async (topicId: string, reason: 'inappropriate' | 'gibberish') => {
-    if (!user) return;
+    if (!user) return
     try {
-      await addDoc(collection(db, 'reports'), {
-        type: 'topic',
-        itemId: topicId,
-        reason,
-        reportedBy: user.uid,
-        timestamp: serverTimestamp(),
-      });
-      alert('Report submitted. Thank you!');
+      const token = await user.getIdToken()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/topics/${topicId}/report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason })
+      })
+      const data = await response.json()
+      if (response.ok && data.success) {
+        alert('Report submitted. Thank you!')
+      } else {
+        alert(data.error || 'Failed to submit report.')
+      }
     } catch (err) {
-      alert('Failed to submit report.');
+      alert('Failed to submit report.')
     }
-  };
+  }
 
   const trendingTopics = topics.filter(topic => topic.trending)
-  const popularTopics = topics.filter(topic => topic.source === 'popular' && !topic.trending)
+  const defaultTopics = topics.filter(topic => topic.source === 'default' && !topic.trending)
   const userTopics = topics.filter(topic => topic.source === 'user')
 
   if (loading) {
@@ -239,10 +262,15 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
               Add
             </button>
           </div>
+          {addError && <p className="text-sm text-red-600 mt-2">{addError}</p>}
         </motion.div>
       )}
 
-      {/* Trending Topics from External APIs */}
+      {loadError && (
+        <div className="text-center py-4 mb-4 text-sm text-red-600">{loadError}</div>
+      )}
+
+      {/* Genuinely trending topics (only ones the backend actually flagged as trending) */}
       {trendingTopics.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -262,15 +290,15 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
                 className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
               >
                 <h3 className="font-semibold text-lg">{topic.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">Trending now</p>
+                <p className="text-sm text-gray-500 mt-1">{usageLabel(topic.usageCount)}</p>
               </motion.button>
             ))}
           </div>
         </motion.div>
       )}
 
-      {/* Popular Topics */}
-      {popularTopics.length > 0 && (
+      {/* Default (built-in) topics */}
+      {defaultTopics.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -278,10 +306,10 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
           className="mb-8"
         >
           <h2 className="text-xl font-semibold mb-4 text-gray-700">
-            📈 Popular Topics
+            📋 Topics
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {popularTopics.map((topic) => (
+            {defaultTopics.map((topic) => (
               <motion.button
                 key={topic.id}
                 whileHover={{ scale: 1.02 }}
@@ -290,7 +318,7 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
                 className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
               >
                 <h3 className="font-semibold text-lg">{topic.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">Frequently debated</p>
+                <p className="text-sm text-gray-500 mt-1">{usageLabel(topic.usageCount)}</p>
               </motion.button>
             ))}
           </div>
@@ -314,18 +342,18 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => onTopicSelect(topic.name)}
-                  className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
+                  className="card hover:shadow-lg transition-shadow cursor-pointer text-left w-full"
                 >
-                  <h3 className="font-semibold text-lg">{topic.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">User created</p>
+                  <h3 className="font-semibold text-lg pr-6">{topic.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{usageLabel(topic.usageCount)}</p>
                 </motion.button>
-                {user && topic.createdBy === user.uid ? (
-                  <button onClick={() => handleDeleteTopic(topic.id)} className="absolute top-2 right-2 text-red-600 hover:text-red-800 text-xs font-bold">Delete</button>
-                ) : (
-                  <div className="absolute top-2 right-2 flex flex-col gap-1">
-                    <button onClick={() => handleReportTopic(topic.id, 'inappropriate')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as inappropriate</button>
-                    <button onClick={() => handleReportTopic(topic.id, 'gibberish')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as gibberish</button>
-                  </div>
+                {user && (
+                  <TopicMenu
+                    topic={topic}
+                    isOwner={topic.createdBy === user.uid}
+                    onDelete={() => handleDeleteTopic(topic.id)}
+                    onReport={(reason) => handleReportTopic(topic.id, reason)}
+                  />
                 )}
               </motion.div>
             ))}
@@ -333,11 +361,11 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
         </motion.div>
       )}
 
-      {topics.length === 0 && (
+      {!loadError && topics.length === 0 && (
         <div className="text-center py-12">
           <p className="text-gray-600">No topics available for this category. Add one above!</p>
         </div>
       )}
     </div>
   )
-} 
+}

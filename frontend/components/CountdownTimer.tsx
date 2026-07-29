@@ -1,294 +1,191 @@
-import React, { useState, useEffect, useRef } from 'react';
+'use client'
 
-export default function CountdownTimer({ showBar, onStopBar, onTimerSet }: { showBar: boolean, onStopBar: () => void, onTimerSet: () => void }) {
-  // State for modal visibility
-  const [modalOpen, setModalOpen] = useState(false);
+import { useState, useEffect, useRef } from 'react'
+import { XMarkIcon, PlayIcon, PauseIcon, ArrowPathIcon, ArrowsRightLeftIcon } from '@heroicons/react/24/solid'
 
-  // Timer durations in seconds (default 3 minutes each)
-  const [leftDuration, setLeftDuration] = useState(180);
-  const [rightDuration, setRightDuration] = useState(180);
+export interface TimerState {
+  myTime: number
+  partnerTime: number
+  isMyTurn: boolean
+  paused: boolean
+  total: number
+  mode: 'setup' | 'running'
+}
 
-  // Remaining times
-  const [leftTime, setLeftTime] = useState(leftDuration);
-  const [rightTime, setRightTime] = useState(rightDuration);
+interface CountdownTimerProps {
+  showBar: boolean
+  onStopBar: () => void
+  onTimerSet: () => void
+  // Debate page passes incoming sync from partner
+  syncedState?: TimerState | null
+  // Debate page listens to this and emits to socket
+  onStateChange?: (state: TimerState) => void
+}
 
-  // Which timer is active? 'left', 'right', or null
-  const [activeTimer, setActiveTimer] = useState<null | 'left' | 'right'>(null);
+const PRESETS = [
+  { label: '1 min', seconds: 60 },
+  { label: '2 min', seconds: 120 },
+  { label: '3 min', seconds: 180 },
+  { label: '5 min', seconds: 300 },
+]
 
-  // Timer running or paused
-  const [running, setRunning] = useState(false);
-  const [paused, setPaused] = useState(false);
+const DEFAULT: TimerState = {
+  myTime: 180, partnerTime: 180, isMyTurn: true,
+  paused: false, total: 180, mode: 'setup'
+}
 
-  // Ref for interval ID
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+export default function CountdownTimer({
+  showBar, onStopBar, onTimerSet,
+  syncedState, onStateChange
+}: CountdownTimerProps) {
+  const [state, setState] = useState<TimerState>(DEFAULT)
+  const [customInput, setCustomInput] = useState('')
+  const [customError, setCustomError] = useState('')
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  // When durations change, update remaining times (but only if not running)
+  // Apply state from partner (via debate page socket)
   useEffect(() => {
-    if (!running && !paused) {
-      setLeftTime(leftDuration);
-      setRightTime(rightDuration);
-    }
-  }, [leftDuration, rightDuration, running, paused]);
+    if (!syncedState) return
+    setState(syncedState)
+  }, [syncedState])
 
-  // Countdown effect
+  // Local tick
   useEffect(() => {
-    if (running && !paused && activeTimer) {
-      intervalRef.current = setInterval(() => {
-        if (activeTimer === 'left') {
-          setLeftTime((t) => {
-            if (t <= 1) {
-              clearInterval(intervalRef.current!);
-              // Auto-switch to right timer
-              setActiveTimer('right');
-              setPaused(false);
-              setRunning(true);
-              return 0;
-            }
-            return t - 1;
-          });
-        } else if (activeTimer === 'right') {
-          setRightTime((t) => {
-            if (t <= 1) {
-              clearInterval(intervalRef.current!);
-              // Reset everything and show Start Countdown button
-              setActiveTimer(null);
-              setRunning(false);
-              setPaused(false);
-              setTimeout(() => {
-                setLeftTime(leftDuration);
-                setRightTime(rightDuration);
-              }, 500);
-              return 0;
-            }
-            return t - 1;
-          });
+    clearInterval(intervalRef.current!)
+    if (state.mode !== 'running' || state.paused) return
+    intervalRef.current = setInterval(() => {
+      setState(prev => {
+        if (prev.mode !== 'running' || prev.paused) return prev
+        const key = prev.isMyTurn ? 'myTime' : 'partnerTime'
+        const cur = prev[key]
+        if (cur <= 1) {
+          const next = { ...prev, [key]: 0, paused: true }
+          onStateChange?.(next)
+          return next
         }
-      }, 1000);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [running, paused, activeTimer, leftDuration, rightDuration]);
+        return { ...prev, [key]: cur - 1 }
+      })
+    }, 1000)
+    return () => clearInterval(intervalRef.current!)
+  }, [state.mode, state.paused, state.isMyTurn])
 
-  // Format seconds to MM:SS
-  const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-    const s = (seconds % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  // Button handlers
-  const handleStart = () => {
-    setActiveTimer('left');
-    setRunning(true);
-    setPaused(false);
-  };
-  const handlePause = () => {
-    setPaused(true);
-    setRunning(false);
-  };
-  const handleUnpause = () => {
-    setPaused(false);
-    setRunning(true);
-  };
-  const handleStartRight = () => {
-    setActiveTimer('right');
-    setRunning(true);
-    setPaused(false);
-  };
-  const handleReset = () => {
-    setRunning(false);
-    setPaused(false);
-    setActiveTimer(null);
-    setLeftTime(leftDuration);
-    setRightTime(rightDuration);
-  };
-
-  // Save times from modal inputs (in minutes), convert to seconds
-  const onSaveTimes = (e: React.FormEvent) => {
-    e.preventDefault();
-    const form = e.target as typeof e.target & {
-      leftMinutes: { value: string };
-      rightMinutes: { value: string };
-    };
-    const leftMin = parseInt(form.leftMinutes.value);
-    const rightMin = parseInt(form.rightMinutes.value);
-    if (isNaN(leftMin) || leftMin <= 0 || isNaN(rightMin) || rightMin <= 0) {
-      alert('Please enter valid positive numbers for minutes.');
-      return;
-    }
-    setLeftDuration(leftMin * 60);
-    setRightDuration(rightMin * 60);
-    setLeftTime(leftMin * 60);
-    setRightTime(rightMin * 60);
-    setActiveTimer(null);
-    setRunning(false);
-    setPaused(false);
-    setModalOpen(false);
-    onTimerSet();
-  };
-
-  // Determine if left or right timer should be red (time 0)
-  const leftIsRed = leftTime === 0;
-  const rightIsRed = rightTime === 0;
-
-  // UI logic for center button(s)
-  let centerButtons: React.ReactNode = null;
-  if (activeTimer === null && leftTime === leftDuration && rightTime === rightDuration) {
-    // Initial state
-    centerButtons = (
-      <button
-        onClick={handleStart}
-        className="btn-primary font-bold text-xl py-2 rounded w-full"
-        aria-label="Start Countdown"
-      >
-        Start Countdown
-      </button>
-    );
-  } else if (activeTimer === 'left' && running && !paused && leftTime > 0) {
-    // Left timer running
-    centerButtons = (
-      <div className="flex gap-2 w-full">
-        <button
-          onClick={handlePause}
-          className="btn-secondary font-bold text-xl py-2 rounded flex-1"
-        >
-          Pause
-        </button>
-        <button
-          onClick={handleStartRight}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Switch to Right
-        </button>
-      </div>
-    );
-  } else if (activeTimer === 'left' && !running && paused && leftTime > 0) {
-    // Left timer paused
-    centerButtons = (
-      <div className="flex gap-2 w-full">
-        <button
-          onClick={handleUnpause}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Unpause
-        </button>
-        <button
-          onClick={handleStartRight}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Switch to Right
-        </button>
-      </div>
-    );
-  } else if (activeTimer === 'left' && leftTime === 0) {
-    // Left timer finished (should not show this, auto-switch happens)
-    centerButtons = null;
-  } else if (activeTimer === 'right' && running && !paused && rightTime > 0) {
-    // Right timer running
-    centerButtons = (
-      <div className="flex gap-2 w-full">
-        <button
-          onClick={handlePause}
-          className="btn-secondary font-bold text-xl py-2 rounded flex-1"
-        >
-          Pause
-        </button>
-        <button
-          onClick={handleReset}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Reset
-        </button>
-      </div>
-    );
-  } else if (activeTimer === 'right' && !running && paused && rightTime > 0) {
-    // Right timer paused
-    centerButtons = (
-      <div className="flex gap-2 w-full">
-        <button
-          onClick={handleUnpause}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Unpause
-        </button>
-        <button
-          onClick={handleReset}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Reset
-        </button>
-      </div>
-    );
-  } else if (activeTimer === 'right' && rightTime === 0) {
-    // Right timer finished (show Stop Timer and Reset)
-    centerButtons = (
-      <div className="flex gap-2 w-full">
-        <button
-          onClick={handleStopBar}
-          className="btn-secondary font-bold text-xl py-2 rounded flex-1"
-        >
-          Stop Timer
-        </button>
-        <button
-          onClick={handleReset}
-          className="btn-primary font-bold text-xl py-2 rounded flex-1"
-        >
-          Reset
-        </button>
-      </div>
-    );
-  } else {
-    // Fallback: allow reset
-    centerButtons = (
-      <button
-        onClick={handleReset}
-        className="btn-primary font-bold text-xl py-2 rounded w-full"
-      >
-        Reset
-      </button>
-    );
+  const apply = (next: TimerState) => {
+    setState(next)
+    onStateChange?.(next)
   }
 
-  // Show bar if showBar prop is true and at least one timer is set
-  const showTopBar = showBar && (leftDuration > 0 || rightDuration > 0);
+  const start = (seconds: number) => {
+    apply({ myTime: seconds, partnerTime: seconds, isMyTurn: true, paused: false, total: seconds, mode: 'running' })
+    onTimerSet()
+  }
 
-  const handleStopBar = () => {
-    setRunning(false);
-    setPaused(false);
-    setActiveTimer(null);
-    setLeftTime(leftDuration);
-    setRightTime(rightDuration);
-    onStopBar();
-  };
+  const handleCustom = () => {
+    const val = customInput.trim()
+    if (!val) return
+    let seconds = 0
+    if (val.includes(':')) {
+      const [m, s] = val.split(':').map(Number)
+      if (isNaN(m) || isNaN(s) || s >= 60) { setCustomError('Use m:ss e.g. 1:30'); return }
+      seconds = m * 60 + s
+    } else {
+      const n = Number(val)
+      if (isNaN(n) || n <= 0) { setCustomError('Enter minutes e.g. 4'); return }
+      seconds = Math.round(n * 60)
+    }
+    if (seconds > 3600) { setCustomError('Max 60 min'); return }
+    setCustomError(''); start(seconds)
+  }
+
+  const handlePause = () => apply({ ...state, paused: !state.paused })
+  const handlePass = () => apply({ ...state, isMyTurn: !state.isMyTurn, paused: false })
+  const handleReset = () => apply({ ...state, myTime: state.total, partnerTime: state.total, isMyTurn: true, paused: false })
+  const handleClose = () => { apply(DEFAULT); onStopBar() }
+
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+
+  const myLow = state.myTime <= 30 && state.myTime > 0
+  const partnerLow = state.partnerTime <= 30 && state.partnerTime > 0
+  const myDone = state.myTime === 0
+  const partnerDone = state.partnerTime === 0
+
+  if (!showBar) return null
 
   return (
-    // Only render the top bar, no modal or extra buttons
-    showBar ? (
-      <div className="fixed top-0 left-0 right-0 z-[50] bg-gray-100 flex items-center justify-between p-4 border-b border-gray-300 shadow" style={{height: '72px'}}>
-        {/* Left timer */}
-        <div
-          className={`w-1/4 text-center font-mono text-2xl ${
-            leftIsRed ? 'text-red-500 font-bold' : ''
-          }`}
-        >
-          {formatTime(leftTime)}
+    <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-100 shadow-sm">
+      {state.mode === 'setup' ? (
+        <div className="flex flex-col items-center py-3 px-5 gap-2 relative">
+          <span className="text-xs font-medium text-gray-500">Set time per player</span>
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {PRESETS.map(p => (
+              <button key={p.seconds} onClick={() => { setCustomInput(''); setCustomError(''); start(p.seconds) }}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 hover:bg-gray-900 hover:text-white text-gray-600 transition-colors">
+                {p.label}
+              </button>
+            ))}
+            <div className="flex items-center gap-1.5">
+              <input type="text" value={customInput}
+                onChange={e => { setCustomInput(e.target.value); setCustomError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleCustom()}
+                placeholder="custom (e.g. 4 or 1:30)"
+                className="w-36 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs focus:outline-none focus:ring-2 focus:ring-gray-900/10 transition-all"/>
+              <button onClick={handleCustom}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-900 hover:bg-gray-700 text-white transition-colors">
+                Start
+              </button>
+            </div>
+            {customError && <span className="text-xs text-red-500">{customError}</span>}
+          </div>
+          <button onClick={handleClose} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <XMarkIcon className="w-4 h-4"/>
+          </button>
         </div>
-
-        {/* Middle button */}
-        <div className="w-2/4 flex flex-col items-center justify-center">
-          {centerButtons}
+      ) : (
+        <div>
+          <div className="flex h-0.5">
+            <div className="w-1/2 bg-gray-100 flex justify-end">
+              <div className={`h-full transition-all duration-1000 ease-linear ${myDone ? 'bg-red-400' : myLow ? 'bg-orange-400' : 'bg-gray-900'}`}
+                style={{ width: `${(state.myTime / state.total) * 100}%` }}/>
+            </div>
+            <div className="w-1/2 bg-gray-100">
+              <div className={`h-full transition-all duration-1000 ease-linear ${partnerDone ? 'bg-red-400' : partnerLow ? 'bg-orange-400' : 'bg-gray-900'}`}
+                style={{ width: `${(state.partnerTime / state.total) * 100}%` }}/>
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-4 px-5 py-2 relative">
+            <div className={`flex items-center gap-1.5 transition-opacity duration-200 ${state.isMyTurn ? 'opacity-100' : 'opacity-40'}`}>
+              {state.isMyTurn && !state.paused && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"/>}
+              <span className={`text-sm font-mono font-semibold tabular-nums ${myDone ? 'text-red-500' : myLow ? 'text-orange-500' : 'text-gray-900'}`}>
+                {fmt(state.myTime)}
+              </span>
+              <span className="text-xs text-gray-400">you</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button onClick={handlePause}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors">
+                {state.paused ? <PlayIcon className="w-3 h-3"/> : <PauseIcon className="w-3 h-3"/>}
+              </button>
+              <button onClick={handlePass} title="Pass turn"
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-900 hover:bg-gray-700 text-white transition-colors">
+                <ArrowsRightLeftIcon className="w-3 h-3"/>
+              </button>
+              <button onClick={handleReset}
+                className="w-6 h-6 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors">
+                <ArrowPathIcon className="w-3 h-3"/>
+              </button>
+            </div>
+            <div className={`flex items-center gap-1.5 transition-opacity duration-200 ${!state.isMyTurn ? 'opacity-100' : 'opacity-40'}`}>
+              <span className="text-xs text-gray-400">partner</span>
+              <span className={`text-sm font-mono font-semibold tabular-nums ${partnerDone ? 'text-red-500' : partnerLow ? 'text-orange-500' : 'text-gray-900'}`}>
+                {fmt(state.partnerTime)}
+              </span>
+              {!state.isMyTurn && !state.paused && <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"/>}
+            </div>
+            <button onClick={handleClose} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <XMarkIcon className="w-4 h-4"/>
+            </button>
+          </div>
         </div>
-
-        {/* Right timer */}
-        <div
-          className={`w-1/4 text-center font-mono text-2xl ${
-            rightIsRed ? 'text-red-500 font-bold' : ''
-          }`}
-        >
-          {formatTime(rightTime)}
-        </div>
-      </div>
-    ) : null
-  );
-} 
+      )}
+    </div>
+  )
+}

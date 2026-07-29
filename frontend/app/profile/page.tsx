@@ -3,145 +3,31 @@ import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { updateProfile } from "firebase/auth";
-import { db, auth } from "@/firebase";
+import { db } from "@/firebase";
 import Navbar from "@/components/Navbar";
 import { useRouter } from "next/navigation";
 
-const COUNTRIES = [
-  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
-  "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi",
-  "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic",
-  "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic",
-  "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia",
-  "Fiji", "Finland", "France",
-  "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
-  "Haiti", "Honduras", "Hungary",
-  "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Ivory Coast",
-  "Jamaica", "Japan", "Jordan",
-  "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan",
-  "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
-  "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar",
-  "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
-  "Oman",
-  "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal",
-  "Qatar",
-  "Romania", "Russia", "Rwanda",
-  "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
-  "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu",
-  "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan",
-  "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
-  "Yemen",
-  "Zambia", "Zimbabwe", "Other"
-];
-
-const LANGUAGES = [
-  "Afrikaans", "Albanian", "Amharic", "Arabic", "Armenian", "Azerbaijani", "Basque", "Belarusian", "Bengali", "Bosnian", "Bulgarian", "Burmese", "Catalan", "Cebuano", "Chinese (Cantonese)", "Chinese (Mandarin)", "Croatian", "Czech", "Danish", "Dutch", "English", "Estonian", "Filipino", "Finnish", "French", "Galician", "Georgian", "German", "Greek", "Gujarati", "Haitian Creole", "Hausa", "Hawaiian", "Hebrew", "Hindi", "Hmong", "Hungarian", "Icelandic", "Igbo", "Indonesian", "Irish", "Italian", "Japanese", "Javanese", "Kannada", "Kazakh", "Khmer", "Korean", "Kurdish", "Kyrgyz", "Lao", "Latin", "Latvian", "Lithuanian", "Luxembourgish", "Macedonian", "Malagasy", "Malay", "Malayalam", "Maltese", "Maori", "Marathi", "Mongolian", "Nepali", "Norwegian", "Odia", "Pashto", "Persian", "Polish", "Portuguese", "Punjabi", "Romanian", "Russian", "Samoan", "Scots Gaelic", "Serbian", "Sesotho", "Shona", "Sindhi", "Sinhala", "Slovak", "Slovenian", "Somali", "Spanish", "Sundanese", "Swahili", "Swedish", "Tagalog", "Tajik", "Tamil", "Telugu", "Thai", "Turkish", "Ukrainian", "Urdu", "Uzbek", "Vietnamese", "Welsh", "Xhosa", "Yiddish", "Yoruba", "Zulu", "Other"
-];
-
-// Searchable Dropdown Component
-interface SearchableDropdownProps {
-  options: string[];
-  selectedValues: string[];
-  onSelectionChange: (values: string[]) => void;
-  placeholder: string;
-  maxHeight?: string;
-}
-
-function SearchableDropdown({ options, selectedValues, onSelectionChange, placeholder, maxHeight = "200px" }: SearchableDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const filteredOptions = options.filter(option =>
-    option.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleOptionClick = (option: string) => {
-    const newSelection = selectedValues.includes(option)
-      ? selectedValues.filter(val => val !== option)
-      : [...selectedValues, option];
-    onSelectionChange(newSelection);
-  };
-
-  const handleRemoveSelection = (option: string) => {
-    onSelectionChange(selectedValues.filter(val => val !== option));
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-        setSearchTerm("");
-      }
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 300;
+        let w = img.width, h = img.height;
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = reject;
+      img.src = e.target!.result as string;
     };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  return (
-    <div ref={dropdownRef} className="relative">
-      {/* Selected values display */}
-      <div className="min-h-[42px] border border-gray-300 rounded-md p-2 bg-white">
-        <div className="flex flex-wrap gap-1">
-          {selectedValues.map((value) => (
-            <span
-              key={value}
-              className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-primary-100 text-primary-800"
-            >
-              {value}
-              <button
-                type="button"
-                onClick={() => handleRemoveSelection(value)}
-                className="ml-1 text-primary-600 hover:text-primary-800"
-              >
-                ×
-              </button>
-            </span>
-          ))}
-          <button
-            type="button"
-            onClick={() => setIsOpen(!isOpen)}
-            className="text-gray-500 hover:text-gray-700 focus:outline-none"
-          >
-            {selectedValues.length === 0 ? placeholder : ""}
-          </button>
-        </div>
-      </div>
-
-      {/* Dropdown */}
-      {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 border-b border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            autoFocus
-          />
-          <div className="max-h-48 overflow-y-auto">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => handleOptionClick(option)}
-                  className={`w-full text-left px-3 py-2 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none ${
-                    selectedValues.includes(option) ? 'bg-primary-50 text-primary-700' : ''
-                  }`}
-                >
-                  {option}
-                </button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-gray-500">No options found</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 interface UserProfile {
@@ -150,10 +36,12 @@ interface UserProfile {
   country: string | null;
   languages: string[];
   bio: string;
-  profileImage: string;
+  profilePicture: string;
   email: string;
   uid: string;
   createdAt: any;
+  followersCount: number;
+  followingCount: number;
 }
 
 export default function ProfilePage() {
@@ -162,174 +50,115 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState("");
-  const [profileLoading, setProfileLoading] = useState(true);
-  
-  // Persistent info state with loading and error handling
-  const [persistentInfo, setPersistentInfo] = useState<{age?: number, country?: string, language?: string}>({});
-  const [loadingPersistentInfo, setLoadingPersistentInfo] = useState(true);
-  const [errorPersistentInfo, setErrorPersistentInfo] = useState<string | null>(null);
+  const [success, setSuccess] = useState("");
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    bio: "",
-    profileImage: ""
-  });
+  const [formData, setFormData] = useState({ name: "", bio: "" });
+  const [picPreview, setPicPreview] = useState("");
+  const [newPicB64, setNewPicB64] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Redirect if not authenticated
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
+    if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
 
-  // Load user profile
+  // Load profile from API (single source of truth)
   useEffect(() => {
-    if (user) {
-      loadUserProfile();
-    }
-  }, [user]);
-
-  // Load persistent user info from API with proper loading and error handling
-  useEffect(() => {
-    const fetchPersistentInfo = async () => {
-      if (!user) return;
-      
-      setLoadingPersistentInfo(true);
-      setErrorPersistentInfo(null);
-      
+    if (!user) return;
+    const load = async () => {
+      setPageLoading(true);
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/me`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!res.ok) {
-          if (res.status === 404) {
-            // User doesn't exist in MongoDB yet, this is normal for new users
-            setPersistentInfo({});
-            return;
-          }
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
-        
-        const data = await res.json();
-        if (data.success) {
-          setPersistentInfo({
-            age: data.user.age,
-            country: data.user.country,
-            language: data.user.language
-          });
-        } else {
-          throw new Error(data.error || 'Failed to load user info');
-        }
+        // Also get Firestore for name/bio/createdAt since those aren't in the API yet
+        const [apiRes, fsDoc] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          getDoc(doc(db, "users", user.uid))
+        ]);
+
+        const fsData = fsDoc.exists() ? fsDoc.data() : {};
+        let apiData: any = {};
+        if (apiRes.ok) { const d = await apiRes.json(); if (d.success) apiData = d.user; }
+
+        const followers: string[] = fsData.followers || []
+        const following: string[] = fsData.following || []
+        const merged: UserProfile = {
+          name: fsData.name || user.displayName || "",
+          bio: fsData.bio || "",
+          age: apiData.age || fsData.age || null,
+          country: apiData.country || fsData.country || null,
+          languages: apiData.languages || fsData.languages || [],
+          profilePicture: apiData.profilePicture || fsData.profilePicture || "",
+          email: fsData.email || user.email || "",
+          uid: user.uid,
+          createdAt: fsData.createdAt || null,
+          followersCount: followers.length,
+          followingCount: following.length,
+        };
+        setProfile(merged);
+        setPicPreview(merged.profilePicture);
+        setFormData({ name: merged.name, bio: merged.bio });
       } catch (err) {
-        console.error('Error fetching persistent info:', err);
-        setErrorPersistentInfo(err instanceof Error ? err.message : 'Error fetching user info');
+        setError("Failed to load profile");
       } finally {
-        setLoadingPersistentInfo(false);
+        setPageLoading(false);
       }
     };
-    fetchPersistentInfo();
+    load();
   }, [user]);
 
-  // Function to retry loading persistent info
-  const retryPersistentInfo = async () => {
-    if (!user) return;
-    
-    setLoadingPersistentInfo(true);
-    setErrorPersistentInfo(null);
-    
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     try {
-      const token = await user.getIdToken();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!res.ok) {
-        if (res.status === 404) {
-          setPersistentInfo({});
-          return;
-        }
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      
-      const data = await res.json();
-      if (data.success) {
-        setPersistentInfo({
-          age: data.user.age,
-          country: data.user.country,
-          language: data.user.language
-        });
-      } else {
-        throw new Error(data.error || 'Failed to load user info');
-      }
-    } catch (err) {
-      console.error('Error retrying persistent info:', err);
-      setErrorPersistentInfo(err instanceof Error ? err.message : 'Error fetching user info');
-    } finally {
-      setLoadingPersistentInfo(false);
-    }
-  };
-
-  const loadUserProfile = async () => {
-    if (!user) return;
-    
-    try {
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      if (userDoc.exists()) {
-        const userData = userDoc.data() as UserProfile;
-        setProfile(userData);
-        setFormData({
-          name: userData.name || "",
-          bio: userData.bio || "",
-          profileImage: userData.profileImage || ""
-        });
-      }
-    } catch (error) {
-      console.error("Error loading profile:", error);
-      setError("Failed to load profile");
-    } finally {
-      setProfileLoading(false);
+      const b64 = await compressImage(file);
+      setPicPreview(b64);
+      setNewPicB64(b64);
+    } catch {
+      setError("Failed to process image. Please try a different file.");
     }
   };
 
   const handleSave = async () => {
     if (!user || !profile) return;
-    
-    setSaving(true);
-    setError("");
-    
+    setSaving(true); setError(""); setSuccess("");
     try {
-      const updatedData = {
+      const token = await user.getIdToken();
+
+      // Save name + bio to Firestore
+      await updateDoc(doc(db, "users", user.uid), {
         name: formData.name.trim(),
         bio: formData.bio.trim(),
-        profileImage: formData.profileImage || profile.profileImage,
-        updatedAt: new Date()
-      };
-
-      // Update Firestore
-      await updateDoc(doc(db, "users", user.uid), updatedData);
-
-      // Update Firebase Auth display name
-      await updateProfile(user, { 
-        displayName: formData.name.trim(),
-        photoURL: formData.profileImage || profile.profileImage
+        updatedAt: new Date(),
       });
 
-      // Update local state
-      setProfile(prev => prev ? { ...prev, ...updatedData } : null);
+      // Save profile picture to API (if changed)
+      if (newPicB64) {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/user/me`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ profilePicture: newPicB64 }),
+        });
+        if (!res.ok) throw new Error("Failed to save profile picture");
+      }
+
+      // Update Firebase Auth display name
+      await updateProfile(user, { displayName: formData.name.trim() });
+
+      setProfile(prev => prev ? {
+        ...prev,
+        name: formData.name.trim(),
+        bio: formData.bio.trim(),
+        profilePicture: newPicB64 || prev.profilePicture,
+      } : null);
+      setNewPicB64("");
       setIsEditing(false);
-    } catch (error) {
-      console.error("Error updating profile:", error);
-      setError("Failed to update profile");
+      setSuccess("Profile updated!");
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err: any) {
+      setError(err.message || "Failed to update profile");
     } finally {
       setSaving(false);
     }
@@ -337,206 +166,160 @@ export default function ProfilePage() {
 
   const handleCancel = () => {
     if (profile) {
-      setFormData({
-        name: profile.name || "",
-        bio: profile.bio || "",
-        profileImage: profile.profileImage || ""
-      });
+      setFormData({ name: profile.name, bio: profile.bio });
+      setPicPreview(profile.profilePicture);
+      setNewPicB64("");
     }
     setIsEditing(false);
     setError("");
   };
+
+  const displayPic = picPreview || profile?.profilePicture;
+
+  if (loading || pageLoading) return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8 animate-pulse">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-24 h-24 rounded-full bg-gray-200" />
+            <div className="space-y-2"><div className="h-6 bg-gray-200 rounded w-32" /><div className="h-4 bg-gray-200 rounded w-48" /></div>
+          </div>
+          <div className="space-y-3"><div className="h-4 bg-gray-200 rounded w-full" /><div className="h-4 bg-gray-200 rounded w-3/4" /></div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            {/* Header with profile picture and edit button */}
+          <div className="bg-white rounded-xl shadow-lg p-8">
+
+            {/* Header */}
             <div className="flex items-start justify-between mb-6">
-              <div className="flex items-center space-x-4">
-                <div className="w-24 h-24 rounded-full bg-gray-200 border border-gray-300 flex items-center justify-center overflow-hidden">
-                  {profileLoading || loadingPersistentInfo ? (
-                    <div className="animate-pulse w-full h-full bg-gray-300" />
-                  ) : errorPersistentInfo || !profile?.profileImage ? (
-                    <span className="text-gray-400 text-3xl font-bold">
-                      {profile?.name ? profile.name.charAt(0).toUpperCase() : 'U'}
-                    </span>
-                  ) : (
-                    <img 
-                      src={profile.profileImage} 
-                      alt={profile.name || 'Profile'} 
-                      className="w-full h-full object-cover"
-                    />
+              <div className="flex items-center gap-5">
+                {/* Profile picture */}
+                <div className="relative group">
+                  <div className="w-24 h-24 rounded-full bg-gray-100 border-2 border-gray-200 flex items-center justify-center overflow-hidden">
+                    {displayPic ? (
+                      <img src={displayPic} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-gray-400 text-3xl font-bold">{profile?.name?.charAt(0).toUpperCase() || 'U'}</span>
+                    )}
+                  </div>
+                  {isEditing && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </button>
                   )}
+                  <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                 </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    {profileLoading || loadingPersistentInfo ? (
-                      <span className="animate-pulse bg-gray-200 rounded w-24 h-6 inline-block" />
-                    ) : errorPersistentInfo || !profile?.name ? (
-                      'N/A'
-                    ) : (
-                      profile.name
-                    )}
-                  </h1>
-                  <p className="text-gray-600">
-                    {profileLoading || loadingPersistentInfo ? (
-                      <span className="animate-pulse bg-gray-200 rounded w-32 h-4 inline-block" />
-                    ) : errorPersistentInfo || !profile?.email ? (
-                      'N/A'
-                    ) : (
-                      profile.email
-                    )}
-                  </p>
-                </div>
+
+
+                {!isEditing && (
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900">{profile?.name || 'No name'}</h1>
+                    <p className="text-gray-500 text-sm">{profile?.email}</p>
+                    {profile?.country && <p className="text-gray-400 text-sm">{profile.country}</p>}
+                  </div>
+                )}
               </div>
+
               <button
-                onClick={() => setIsEditing(!isEditing)}
-                className="bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors"
-                disabled={profileLoading || loadingPersistentInfo}
+                onClick={() => isEditing ? handleCancel() : setIsEditing(true)}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
               >
-                {isEditing ? "Cancel" : "Edit"}
+                {isEditing ? "Cancel" : "Edit profile"}
               </button>
             </div>
 
-            {/* Error banner for persistent info */}
-            {errorPersistentInfo && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded flex flex-col items-center">
-                <span>Failed to load user information</span>
-                <span className="text-xs mt-1">{errorPersistentInfo}</span>
-                <button
-                  onClick={retryPersistentInfo}
-                  disabled={loadingPersistentInfo}
-                  className="mt-2 bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50"
-                >
-                  {loadingPersistentInfo ? 'Retrying...' : 'Try Again'}
-                </button>
-              </div>
-            )}
+            {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>}
+            {success && <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">{success}</div>}
 
-            {/* Error banner for profile update */}
-            {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-                {error}
-              </div>
-            )}
-
-            {/* Profile not found fallback */}
-            {!profile && !profileLoading && !loadingPersistentInfo && !errorPersistentInfo && (
-              <div className="text-center text-gray-600 mb-4">Profile not found</div>
-            )}
-
-            {/* Main content: Edit form or display mode */}
             {isEditing ? (
-              /* Edit Form */
-              <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+              <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                   <input
                     type="text"
                     value={formData.name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    onChange={e => setFormData(p => ({ ...p, name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
                   <textarea
                     value={formData.bio}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    onChange={e => setFormData(p => ({ ...p, bio: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     rows={4}
-                    placeholder="Tell us about yourself..."
+                    placeholder="Tell others who you are and what you like to debate..."
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Profile Image URL</label>
-                  <input
-                    type="url"
-                    value={formData.profileImage}
-                    onChange={(e) => setFormData(prev => ({ ...prev, profileImage: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                </div>
-                <div className="flex justify-end space-x-3">
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save Changes"}
+                <div className="flex justify-end gap-3">
+                  <button onClick={handleCancel} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm">Cancel</button>
+                  <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50 text-sm">
+                    {saving ? "Saving..." : "Save changes"}
                   </button>
                 </div>
-              </form>
+              </div>
             ) : (
-              /* Display Mode */
-              <div className="space-y-4">
+              <div className="space-y-5">
+                {/* Bio */}
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Bio</h3>
-                  {profileLoading || loadingPersistentInfo ? (
-                    <div className="animate-pulse h-6 bg-gray-200 rounded w-1/2" />
-                  ) : errorPersistentInfo || !profile?.bio ? (
-                    <span className="text-gray-400">N/A</span>
-                  ) : (
-                    <p className="text-gray-700">{profile.bio}</p>
-                  )}
+                  <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-1">Bio</h3>
+                  <p className="text-gray-700">{profile?.bio || <span className="text-gray-400 italic">No bio yet</span>}</p>
                 </div>
-                {/* Persistent Info Display */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-4 pt-4 border-t border-gray-100">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Age</h3>
-                    {profileLoading || loadingPersistentInfo ? (
-                      <div className="animate-pulse h-4 bg-gray-200 rounded w-10" />
-                    ) : errorPersistentInfo || persistentInfo.age === undefined || persistentInfo.age === null ? (
-                      <span className="text-gray-400">N/A</span>
-                    ) : (
-                      <p className="text-gray-900">{persistentInfo.age}</p>
-                    )}
+                    <p className="text-sm text-gray-500">Age</p>
+                    <p className="font-medium text-gray-900">{profile?.age ?? <span className="text-gray-400">—</span>}</p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Country</h3>
-                    {profileLoading || loadingPersistentInfo ? (
-                      <div className="animate-pulse h-4 bg-gray-200 rounded w-20" />
-                    ) : errorPersistentInfo || !persistentInfo.country ? (
-                      <span className="text-gray-400">N/A</span>
-                    ) : (
-                      <p className="text-gray-900">{persistentInfo.country}</p>
-                    )}
+                    <p className="text-sm text-gray-500">Country</p>
+                    <p className="font-medium text-gray-900">{profile?.country || <span className="text-gray-400">—</span>}</p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide">Language</h3>
-                    {profileLoading || loadingPersistentInfo ? (
-                      <div className="animate-pulse h-4 bg-gray-200 rounded w-20" />
-                    ) : errorPersistentInfo || !persistentInfo.language ? (
-                      <span className="text-gray-400">N/A</span>
-                    ) : (
-                      <p className="text-gray-900">{persistentInfo.language}</p>
-                    )}
+                    <p className="text-sm text-gray-500">Languages</p>
+                    <p className="font-medium text-gray-900">
+                      {profile?.languages?.length ? profile.languages.join(', ') : <span className="text-gray-400">—</span>}
+                    </p>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-gray-200">
-                  {profileLoading || loadingPersistentInfo ? (
-                    <div className="animate-pulse h-4 bg-gray-200 rounded w-32" />
-                  ) : errorPersistentInfo || !profile?.createdAt ? (
-                    <span className="text-gray-400">N/A</span>
-                  ) : (
-                    <p className="text-sm text-gray-500">
-                      Member since {profile.createdAt.toDate().toLocaleDateString()}
-                    </p>
-                  )}
+                {/* Followers / Following */}
+                <div className="flex gap-8 pt-4 border-t border-gray-100">
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{profile?.followersCount ?? 0}</p>
+                    <p className="text-sm text-gray-400">Followers</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-gray-900">{profile?.followingCount ?? 0}</p>
+                    <p className="text-sm text-gray-400">Following</p>
+                  </div>
                 </div>
+
+                {profile?.createdAt && (
+                  <div className="pt-4 border-t border-gray-100">
+                    <p className="text-sm text-gray-400">
+                      Member since {profile.createdAt.toDate?.().toLocaleDateString() || '—'}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -544,4 +327,4 @@ export default function ProfilePage() {
       </div>
     </div>
   );
-} 
+}

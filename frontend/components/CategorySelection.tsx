@@ -1,17 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { useAuth } from '@/contexts/AuthContext';
-import { db } from '@/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useAuth } from '@/contexts/AuthContext'
 
 interface Category {
   id: string
   name: string
-  source: 'external' | 'user' | 'popular'
+  source: 'default' | 'user' | 'external'
   trending?: boolean
-  createdBy?: string; // Added for user-created categories
+  usageCount?: number
+  createdBy?: string | null
 }
 
 interface CategorySelectionProps {
@@ -19,50 +18,110 @@ interface CategorySelectionProps {
   onBack: () => void
 }
 
+// Must match DELETE_PROTECTION_THRESHOLD in backend/src/routes/categories.ts
+const DELETE_PROTECTION_THRESHOLD = 10
+
+function usageLabel(count: number | undefined) {
+  const n = count || 0
+  return `Used in ${n} debate${n === 1 ? '' : 's'}`
+}
+
+// Small "..." menu shown on each user-added category card
+function CategoryMenu({
+  category,
+  isOwner,
+  onDelete,
+  onReport
+}: {
+  category: Category
+  isOwner: boolean
+  onDelete: () => void
+  onReport: (reason: 'inappropriate' | 'gibberish') => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const canDelete = isOwner && (category.usageCount || 0) < DELETE_PROTECTION_THRESHOLD
+
+  return (
+    <div ref={ref} className="absolute top-2 right-2">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+        className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+        aria-label="More options"
+      >
+        ⋮
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-10 py-1">
+          {canDelete && (
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete() }}
+              className="block w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+            >
+              Delete category
+            </button>
+          )}
+          {isOwner && !canDelete && (
+            <div className="px-3 py-2 text-xs text-gray-400">
+              Too many people use this to delete it
+            </div>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpen(false); onReport('inappropriate') }}
+            className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Report: inappropriate
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); setOpen(false); onReport('gibberish') }}
+            className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            Report: gibberish
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function CategorySelection({ onCategorySelect, onBack }: CategorySelectionProps) {
-  const { user } = useAuth();
+  const { user } = useAuth()
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [showAddForm, setShowAddForm] = useState(false)
+  const [addError, setAddError] = useState('')
 
   useEffect(() => {
     fetchCategories()
   }, [])
 
   const fetchCategories = async () => {
+    setLoading(true)
+    setLoadError('')
     try {
-      setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories`)
-      if (response.ok) {
-        const data = await response.json()
+      const data = await response.json()
+      if (response.ok && data.success) {
         setCategories(data.categories)
       } else {
-        // Fallback to default categories if API is not available
-        setCategories([
-          { id: '1', name: 'Politics', source: 'popular', trending: true },
-          { id: '2', name: 'Technology', source: 'popular', trending: true },
-          { id: '3', name: 'Environment', source: 'popular', trending: true },
-          { id: '4', name: 'Healthcare', source: 'popular' },
-          { id: '5', name: 'Education', source: 'popular' },
-          { id: '6', name: 'Economy', source: 'popular' },
-          { id: '7', name: 'Social Issues', source: 'popular' },
-          { id: '8', name: 'Science', source: 'popular' },
-        ])
+        setLoadError(data.error || 'Failed to load categories')
+        setCategories([])
       }
     } catch (error) {
       console.error('Error fetching categories:', error)
-      // Fallback to default categories
-      setCategories([
-        { id: '1', name: 'Politics', source: 'popular', trending: true },
-        { id: '2', name: 'Technology', source: 'popular', trending: true },
-        { id: '3', name: 'Environment', source: 'popular', trending: true },
-        { id: '4', name: 'Healthcare', source: 'popular' },
-        { id: '5', name: 'Education', source: 'popular' },
-        { id: '6', name: 'Economy', source: 'popular' },
-        { id: '7', name: 'Social Issues', source: 'popular' },
-        { id: '8', name: 'Science', source: 'popular' },
-      ])
+      setLoadError('Could not reach the server. Please try again.')
+      setCategories([])
     } finally {
       setLoading(false)
     }
@@ -70,67 +129,82 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
 
   const handleAddCategory = async () => {
     if (!newCategory.trim()) return
+    if (!user) {
+      setAddError('You need to be logged in to add a category.')
+      return
+    }
+    setAddError('')
 
     try {
+      const token = await user.getIdToken()
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ name: newCategory }),
+        body: JSON.stringify({ name: newCategory.trim() }),
       })
 
-      if (response.ok) {
-        const data = await response.json()
+      const data = await response.json()
+      if (response.ok && data.success) {
         setCategories(prev => [...prev, data.category])
         setNewCategory('')
         setShowAddForm(false)
+      } else {
+        setAddError(data.error || 'Failed to add category')
       }
     } catch (error) {
       console.error('Error adding category:', error)
-      // Add locally if API fails
-      const newCat: Category = {
-        id: Date.now().toString(),
-        name: newCategory,
-        source: 'user'
-      }
-      setCategories(prev => [...prev, newCat])
-      setNewCategory('')
-      setShowAddForm(false)
+      setAddError('Could not reach the server. Please try again.')
     }
   }
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!user) return;
+    if (!user) return
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${categoryId}`, {
+      const token = await user.getIdToken()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${categoryId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${await user.getIdToken()}` }
-      });
-      setCategories(prev => prev.filter(c => c.id !== categoryId));
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const data = await response.json()
+      if (response.ok && data.success) {
+        setCategories(prev => prev.filter(c => c.id !== categoryId))
+      } else {
+        alert(data.error || 'Failed to delete category.')
+      }
     } catch (err) {
-      alert('Failed to delete category.');
+      alert('Failed to delete category.')
     }
-  };
+  }
 
   const handleReportCategory = async (categoryId: string, reason: 'inappropriate' | 'gibberish') => {
-    if (!user) return;
+    if (!user) return
     try {
-      await addDoc(collection(db, 'reports'), {
-        type: 'category',
-        itemId: categoryId,
-        reason,
-        reportedBy: user.uid,
-        timestamp: serverTimestamp(),
-      });
-      alert('Report submitted. Thank you!');
+      const token = await user.getIdToken()
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/categories/${categoryId}/report`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ reason })
+      })
+      const data = await response.json()
+      if (response.ok && data.success) {
+        alert('Report submitted. Thank you!')
+      } else {
+        alert(data.error || 'Failed to submit report.')
+      }
     } catch (err) {
-      alert('Failed to submit report.');
+      alert('Failed to submit report.')
     }
-  };
+  }
 
+  // Real backend source values: 'default' | 'user' | 'external'
   const trendingCategories = categories.filter(cat => cat.trending)
-  const popularCategories = categories.filter(cat => cat.source === 'popular' && !cat.trending)
+  const defaultCategories = categories.filter(cat => cat.source === 'default' && !cat.trending)
   const userCategories = categories.filter(cat => cat.source === 'user')
 
   if (loading) {
@@ -184,10 +258,15 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
               Add
             </button>
           </div>
+          {addError && <p className="text-sm text-red-600 mt-2">{addError}</p>}
         </motion.div>
       )}
 
-      {/* Trending Categories from External APIs */}
+      {loadError && (
+        <div className="text-center py-4 mb-4 text-sm text-red-600">{loadError}</div>
+      )}
+
+      {/* Genuinely trending categories (only ones the backend actually flagged as trending) */}
       {trendingCategories.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -207,15 +286,15 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
                 className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
               >
                 <h3 className="font-semibold text-lg">{category.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">Trending now</p>
+                <p className="text-sm text-gray-500 mt-1">{usageLabel(category.usageCount)}</p>
               </motion.button>
             ))}
           </div>
         </motion.div>
       )}
 
-      {/* Popular Categories */}
-      {popularCategories.length > 0 && (
+      {/* Default (built-in) categories */}
+      {defaultCategories.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -223,10 +302,10 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
           className="mb-8"
         >
           <h2 className="text-xl font-semibold mb-4 text-gray-700">
-            📈 Popular Categories
+            📋 Categories
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {popularCategories.map((category) => (
+            {defaultCategories.map((category) => (
               <motion.button
                 key={category.id}
                 whileHover={{ scale: 1.02 }}
@@ -235,7 +314,7 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
                 className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
               >
                 <h3 className="font-semibold text-lg">{category.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">Frequently debated</p>
+                <p className="text-sm text-gray-500 mt-1">{usageLabel(category.usageCount)}</p>
               </motion.button>
             ))}
           </div>
@@ -259,18 +338,18 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => onCategorySelect(category.name)}
-                  className="card hover:shadow-lg transition-shadow cursor-pointer text-left"
+                  className="card hover:shadow-lg transition-shadow cursor-pointer text-left w-full"
                 >
-                  <h3 className="font-semibold text-lg">{category.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">User created</p>
+                  <h3 className="font-semibold text-lg pr-6">{category.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{usageLabel(category.usageCount)}</p>
                 </motion.button>
-                {user && category.createdBy === user.uid ? (
-                  <button onClick={() => handleDeleteCategory(category.id)} className="absolute top-2 right-2 text-red-600 hover:text-red-800 text-xs font-bold">Delete</button>
-                ) : (
-                  <div className="absolute top-2 right-2 flex flex-col gap-1">
-                    <button onClick={() => handleReportCategory(category.id, 'inappropriate')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as inappropriate</button>
-                    <button onClick={() => handleReportCategory(category.id, 'gibberish')} className="text-xs text-yellow-700 hover:text-yellow-900">Report as gibberish</button>
-                  </div>
+                {user && (
+                  <CategoryMenu
+                    category={category}
+                    isOwner={category.createdBy === user.uid}
+                    onDelete={() => handleDeleteCategory(category.id)}
+                    onReport={(reason) => handleReportCategory(category.id, reason)}
+                  />
                 )}
               </motion.div>
             ))}
@@ -278,11 +357,11 @@ export default function CategorySelection({ onCategorySelect, onBack }: Category
         </motion.div>
       )}
 
-      {categories.length === 0 && (
+      {!loadError && categories.length === 0 && (
         <div className="text-center py-12">
           <p className="text-gray-600">No categories available. Add one above!</p>
         </div>
       )}
     </div>
   )
-} 
+}

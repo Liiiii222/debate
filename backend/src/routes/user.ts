@@ -1,48 +1,65 @@
-import express, { Request, Response } from 'express';
-import admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/authMiddleware';
+import express, { Response } from 'express'
+import { db } from '../config/firebaseAdmin'
+import { authMiddleware, AuthenticatedRequest } from '../middleware/authMiddleware'
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-  });
-}
-const db = getFirestore();
+const router = express.Router()
 
-const router = express.Router();
-
-// GET /api/user/me - Get current user's profile
-router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// GET /api/user/me
+router.get('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user?.uid) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-    const userDoc = await db.collection('users').doc(req.user.uid).get();
-    if (!userDoc.exists) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    return res.json(userDoc.data());
-  } catch (error) {
-    console.error('Error fetching user profile:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    if (!req.user?.uid) { res.status(401).json({ success: false, error: 'Not authenticated' }); return }
+    const doc = await db.collection('users').doc(req.user.uid).get()
+    if (!doc.exists) { res.status(404).json({ success: false, error: 'User not found' }); return }
+    const data = doc.data()!
+    res.json({
+      success: true,
+      user: {
+        uid: req.user.uid,
+        name: data.name || '',
+        email: data.email || '',
+        age: data.age || null,
+        country: data.country || '',
+        languages: data.languages || [],
+        profilePicture: data.profilePicture || '',
+        followersCount: data.followersCount || 0,
+        followingCount: data.followingCount || 0,
+      }
+    })
+  } catch (err) {
+    console.error('GET /user/me error:', err)
+    res.status(500).json({ success: false, error: 'Failed to fetch user info' })
   }
-});
+})
 
-// PUT /api/user/me - Update current user's profile
-router.put('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+// PUT /api/user/me
+router.put('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    if (!req.user?.uid) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-    const updateData = req.body;
-    await db.collection('users').doc(req.user.uid).set(updateData, { merge: true });
-    const userDoc = await db.collection('users').doc(req.user.uid).get();
-    return res.json(userDoc.data());
-  } catch (error) {
-    console.error('Error updating user profile:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    if (!req.user?.uid) { res.status(401).json({ success: false, error: 'Not authenticated' }); return }
+    const { age, country, languages, profilePicture } = req.body
+    const update: Record<string, any> = { updatedAt: new Date() }
+    if (age !== undefined) update.age = age
+    if (country !== undefined) update.country = country
+    if (languages !== undefined) update.languages = languages
+    if (profilePicture !== undefined) update.profilePicture = profilePicture
+    await db.collection('users').doc(req.user.uid).set(update, { merge: true })
+    const doc = await db.collection('users').doc(req.user.uid).get()
+    const data = doc.data()!
+    res.json({
+      success: true,
+      user: {
+        uid: req.user.uid,
+        name: data.name || '',
+        email: data.email || '',
+        age: data.age || null,
+        country: data.country || '',
+        languages: data.languages || [],
+        profilePicture: data.profilePicture || '',
+      }
+    })
+  } catch (err) {
+    console.error('PUT /user/me error:', err)
+    res.status(500).json({ success: false, error: 'Failed to update user info' })
   }
-});
+})
 
-export default router;
+export default router
