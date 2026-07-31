@@ -1,15 +1,25 @@
-import admin from 'firebase-admin';
-import { getFirestore } from 'firebase-admin/firestore';
-import serviceAccount from '../../firebase-service-account.json';
+import admin from 'firebase-admin'
+import { getFirestore } from 'firebase-admin/firestore'
 
-// Initialize Firebase only once, even if this file gets imported multiple times
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
-  });
+  // In production (Railway), use environment variables
+  // In development, fall back to the local JSON file
+  if (process.env.FIREBASE_PRIVATE_KEY) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      }),
+    })
+  } else {
+    // Local development only
+    const serviceAccount = require('../../firebase-service-account.json')
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+    })
+  }
 }
 
-// Shared Firestore database connection, used across all route files
-export const db = getFirestore();
-
-export default admin;
+export const db = getFirestore()
+export default admin
