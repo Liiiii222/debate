@@ -122,17 +122,17 @@ export const setupSocketHandlers = (io: Server) => {
     })
 
     // WebRTC signaling — just relay between peers
-    socket.on('webrtc-offer', (data: { offer: RTCSessionDescriptionInit }) => {
+    socket.on('webrtc-offer', (data: { offer: any }) => {
       const { roomId } = socket.data
       if (roomId) socket.to(roomId).emit('webrtc-offer', { offer: data.offer })
     })
 
-    socket.on('webrtc-answer', (data: { answer: RTCSessionDescriptionInit }) => {
+    socket.on('webrtc-answer', (data: { answer: any }) => {
       const { roomId } = socket.data
       if (roomId) socket.to(roomId).emit('webrtc-answer', { answer: data.answer })
     })
 
-    socket.on('webrtc-ice-candidate', (data: { candidate: RTCIceCandidateInit }) => {
+    socket.on('webrtc-ice-candidate', (data: { candidate: any }) => {
       const { roomId } = socket.data
       if (roomId) socket.to(roomId).emit('webrtc-ice-candidate', { candidate: data.candidate })
     })
@@ -177,6 +177,7 @@ export const setupSocketHandlers = (io: Server) => {
     socket.on('ping', () => socket.emit('pong', { timestamp: new Date().toISOString() }))
   })
 }
+
 
 
 
