@@ -104,7 +104,7 @@ export const setupSocketHandlers = (io: Server) => {
     })
 
     // Text debate messages
-    socket.on('debate-message', (data: { text: string; timestamp: number }) => {
+    socket.on('debate-message', (data: { text: string; timestamp: number; replyTo?: any }) => {
       const { roomId, uid } = socket.data
       if (roomId) {
         socket.to(roomId).emit('debate-message', { text: data.text, senderUid: uid, timestamp: data.timestamp || Date.now(), replyTo: data.replyTo })
@@ -177,6 +177,7 @@ export const setupSocketHandlers = (io: Server) => {
     socket.on('ping', () => socket.emit('pong', { timestamp: new Date().toISOString() }))
   })
 }
+
 
 
 
