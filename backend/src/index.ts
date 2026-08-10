@@ -21,7 +21,6 @@ const httpServer = createServer(app)
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 const allowedOrigins = [FRONTEND_URL, 'http://localhost:3000', 'http://localhost:3001']
-const allowedOrigins = [FRONTEND_URL, 'http://localhost:3000', 'http://localhost:3001']
 
 // Socket.IO — attached to the same HTTP server as Express, same port
 const io = new Server(httpServer, {
@@ -33,6 +32,7 @@ const io = new Server(httpServer, {
 
 setupSocketHandlers(io)
 
+const allowedOrigins = [FRONTEND_URL, 'http://localhost:3000', 'http://localhost:3001']
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json())
 
@@ -55,5 +55,6 @@ const PORT = process.env.PORT || 3001
 httpServer.listen(PORT, () => {
   console.log(`Server + Socket.IO running on port ${PORT}`)
 })
+
 
 
