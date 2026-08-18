@@ -22,6 +22,7 @@ const userPreferencesSchema = Joi.object({
   ageRange: Joi.string().trim().min(1).max(20).required(),
   languages: Joi.array().items(Joi.string().trim().max(50)).optional().default([]),
   countries: Joi.array().items(Joi.string().trim().max(100)).optional().default([]),
+  university: Joi.string().optional().allow(''),
   debateFormats: Joi.array().items(Joi.string().trim()).min(1).required()
 })
 
@@ -62,3 +63,4 @@ export const validate = (schema: Joi.ObjectSchema) => {
     next()
   }
 }
+
