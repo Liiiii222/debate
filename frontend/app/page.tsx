@@ -21,7 +21,6 @@ export type UserPreferences = {
   ageRange: string
   languages: string[]
   countries: string[]
-  university?: string
   debateFormats: string[]
 }
 
@@ -33,7 +32,6 @@ export default function Home() {
     ageRange: 'Any age',
     languages: [],
     countries: [],
-    university: '',
     debateFormats: []
   })
 
@@ -70,8 +68,7 @@ export default function Home() {
       ageRange: 'Any age',
       languages: [],
       countries: [],
-      university: '',
-      debateFormats: []
+        debateFormats: []
     })
   }
 
@@ -155,3 +152,4 @@ export default function Home() {
     </div>
   )
 }
+
