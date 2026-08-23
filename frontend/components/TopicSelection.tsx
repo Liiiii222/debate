@@ -231,7 +231,7 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
           ← Back
         </button>
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900">Choose a Topic</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Choose a Topic / Question</h1>
           <p className="text-lg text-gray-600 mt-2">Category: {category}</p>
         </div>
         <button
@@ -248,13 +248,13 @@ export default function TopicSelection({ category, onTopicSelect, onBack }: Topi
           animate={{ opacity: 1, y: 0 }}
           className="card mb-8"
         >
-          <h3 className="text-lg font-semibold mb-4">Add New Topic</h3>
+          <h3 className="text-lg font-semibold mb-4">Add a Topic or Question</h3>
           <div className="flex gap-4">
             <input
               type="text"
               value={newTopic}
               onChange={(e) => setNewTopic(e.target.value)}
-              placeholder="Enter topic name..."
+              placeholder="Enter a topic or debate question..."
               className="input-field flex-1"
               onKeyPress={(e) => e.key === 'Enter' && handleAddTopic()}
             />
