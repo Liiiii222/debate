@@ -260,7 +260,12 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
           <span className="text-xs text-gray-400">{connState==='connected'?'Connected':partnerLeft?'Partner left':connState==='failed'?'Failed':'Connecting...'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={()=>{stream.current?.getAudioTracks().forEach(t=>{t.enabled=!mic});setMic(m=>!m)}} className={btn(!mic)}><MicrophoneIcon className="w-4 h-4"/></button>
+          <button onClick={()=>{stream.current?.getAudioTracks().forEach(t=>{t.enabled=!mic});setMic(m=>!m)}} className={btn(!mic)} title={mic?'Mute':'Unmute'}>
+              <div className="relative">
+                <MicrophoneIcon className="w-4 h-4"/>
+                {!mic && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold leading-none" style={{fontSize:'13px',fontWeight:900}}>&#47;</span>}
+              </div>
+            </button>
           <button onClick={()=>{stream.current?.getVideoTracks().forEach(t=>{t.enabled=!cam});setCam(c=>!c)}} className={btn(!cam)}>{cam?<VideoCameraIcon className="w-4 h-4"/>:<VideoCameraSlashIcon className="w-4 h-4"/>}</button>
           <button onClick={()=>{setChatOpen(c=>!c);setFactOpen(false)}} className={btn(chatOpen)}>
             <ChatBubbleLeftRightIcon className="w-4 h-4"/>

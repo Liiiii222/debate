@@ -252,7 +252,12 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
           <span className="text-xs text-gray-400">{partnerPresent?'Connected':partnerLeft?'Partner left':'Waiting...'}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={()=>{stream.current?.getAudioTracks().forEach(t=>{t.enabled=!mic});setMic(m=>!m)}} className={btn(!mic)}><MicrophoneIcon className="w-4 h-4"/></button>
+          <button onClick={()=>{stream.current?.getAudioTracks().forEach(t=>{t.enabled=!mic});setMic(m=>!m)}} className={btn(!mic)} title={mic?'Mute':'Unmute'}>
+              <div className="relative">
+                <MicrophoneIcon className="w-4 h-4"/>
+                {!mic && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold leading-none" style={{fontSize:'13px',fontWeight:900}}>&#47;</span>}
+              </div>
+            </button>
           <button onClick={()=>{setChatOpen(c=>!c);setFactOpen(false)}} className={btn(chatOpen)}>
             <ChatBubbleLeftRightIcon className="w-4 h-4"/>
             {unread>0&&!chatOpen&&<span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] rounded-full flex items-center justify-center">{unread}</span>}
