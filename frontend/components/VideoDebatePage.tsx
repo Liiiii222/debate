@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
+import RematchOfferPopup from './RematchOfferPopup'
 import CountdownTimer, { TimerState } from './CountdownTimer'
 import {
   MicrophoneIcon, VideoCameraIcon, VideoCameraSlashIcon,
@@ -41,6 +42,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
   const [chatIn, setChatIn] = useState('')
   const [partnerTyping, setPartnerTyping] = useState(false)
   const [timerBar, setTimerBar] = useState(false)
+  const [rematchOffer, setRematchOffer] = useState<any>(null)
   const [timerSyncedState, setTimerSyncedState] = useState<TimerState | null>(null)
   const [factService, setFactService] = useState<'wikipedia'|'perplexity'|'wolfram'>('wikipedia')
   const [factQ, setFactQ] = useState('')
@@ -117,7 +119,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
       return p
     }
 
-    socket.on('connect', () => socket.emit('join-debate',{uid:user.uid,roomId:rid}))
+    socket.on('connect', () => socket.emit('join-debate',{uid:user.uid,roomId:rid,topic:userPreferences?.topic||'',category:userPreferences?.category||'',debateFormat:'Video',preferences:userPreferences}))
     socket.on('partner-joined', async () => {
       setPartnerPresent(true); setPartnerLeft(false)
       let w=0; while(!stream.current&&w<8000){await new Promise(r=>setTimeout(r,100));w+=100}
@@ -140,6 +142,20 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     socket.on('debate-message', (d:any) => setMsgs(p=>[...p,{id:Math.random().toString(36),sender:'partner',text:d.text,timestamp:d.timestamp}]))
     socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();pc.current=null;if(partnerVid.current)partnerVid.current.srcObject=null })
     socket.on('partner-disconnected', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();if(partnerVid.current)partnerVid.current.srcObject=null })
+    socket.on('quick-match-offer', (data: any) => {
+      setRematchOffer(data)
+    })
+
+    socket.on('rematch-confirmed', (data: any) => {
+      // Reload with new partner — navigate to same format with new uid
+      window.location.href = window.location.href
+    })
+
+    socket.on('rematch-declined', () => {
+      // Offer was declined, continue normal search
+      setRematchOffer(null)
+    })
+
     socket.on('timer-sync', (state:TimerState) => { setTimerSyncedState(state); if(state.mode==='running')setTimerBar(true); else if(state.mode==='setup')setTimerBar(false) })
 
     return () => { socket.emit('leave-debate');socket.disconnect();pc.current?.close() }
@@ -172,6 +188,16 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     if (!user||!matchedUid) return
     try { const t=await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({reason})}); setShowReport(false) } catch {}
   }
+  const handleRematchAccept = (offeredUid: string) => {
+    setRematchOffer(null)
+    sock.current?.emit('rematch-response', { accept: true, offeredUid })
+  }
+
+  const handleRematchDecline = (offeredUid: string) => {
+    setRematchOffer(null)
+    sock.current?.emit('rematch-response', { accept: false, offeredUid })
+  }
+
   const handleTimerStateChange = (state:TimerState) => { sock.current?.emit('timer-relay',state) }
   const end = () => { sock.current?.emit('leave-debate'); window.location.href='/' }
 
@@ -332,6 +358,14 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
       )}
 
       {/* End modal */}
+      {rematchOffer && (
+        <RematchOfferPopup
+          offer={rematchOffer}
+          onAccept={handleRematchAccept}
+          onDecline={handleRematchDecline}
+        />
+      )}
+
       {showEnd&&(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-xl border border-gray-100 mx-4">

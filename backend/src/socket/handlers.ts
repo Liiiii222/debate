@@ -4,6 +4,17 @@ import { db } from '../config/firebaseAdmin'
 // Map from Firebase uid → socket.id so matchmaking can push to specific users
 export const searchingUsers = new Map<string, string>()
 
+// Rematch queue: users whose partner left, waiting for a new one
+export const awaitingRematch = new Map<string, {
+  socketId: string
+  uid: string
+  preferences: any
+  topic: string
+  category: string
+  debateFormat: string
+  timeout: NodeJS.Timeout
+}>()
+
 // Track which rooms have accepted — roomId → Map of uid → their debateFormats
 const roomAccepted = new Map<string, Map<string, string[]>>()
 
@@ -83,6 +94,10 @@ export const setupSocketHandlers = (io: Server) => {
         const wasEmpty = (await io.in(roomId).allSockets()).size === 0
         socket.join(roomId)
         socket.data.roomId = roomId
+        if (data.topic) socket.data.topic = data.topic
+        if (data.category) socket.data.category = data.category
+        if (data.debateFormat) socket.data.debateFormat = data.debateFormat
+        if (data.preferences) socket.data.preferences = data.preferences
         socket.data.uid = uid
         socket.data.isOfferer = wasEmpty // first one in = offerer
 
@@ -104,10 +119,14 @@ export const setupSocketHandlers = (io: Server) => {
     })
 
     // Text debate messages
-    socket.on('debate-message', (data: { text: string; timestamp: number; replyTo?: any }) => {
+    socket.on('debate-message', (data: { text: string; timestamp: number }) => {
       const { roomId, uid } = socket.data
       if (roomId) {
-        socket.to(roomId).emit('debate-message', { text: data.text, senderUid: uid, timestamp: data.timestamp || Date.now(), replyTo: data.replyTo })
+        socket.to(roomId).emit('debate-message', {
+          text: data.text,
+          senderUid: uid,
+          timestamp: data.timestamp || Date.now()
+        })
       }
     })
 
@@ -122,17 +141,17 @@ export const setupSocketHandlers = (io: Server) => {
     })
 
     // WebRTC signaling — just relay between peers
-    socket.on('webrtc-offer', (data: { offer: any }) => {
+    socket.on('webrtc-offer', (data: { offer: RTCSessionDescriptionInit }) => {
       const { roomId } = socket.data
       if (roomId) socket.to(roomId).emit('webrtc-offer', { offer: data.offer })
     })
 
-    socket.on('webrtc-answer', (data: { answer: any }) => {
+    socket.on('webrtc-answer', (data: { answer: RTCSessionDescriptionInit }) => {
       const { roomId } = socket.data
       if (roomId) socket.to(roomId).emit('webrtc-answer', { answer: data.answer })
     })
 
-    socket.on('webrtc-ice-candidate', (data: { candidate: any }) => {
+    socket.on('webrtc-ice-candidate', (data: { candidate: RTCIceCandidateInit }) => {
       const { roomId } = socket.data
       if (roomId) socket.to(roomId).emit('webrtc-ice-candidate', { candidate: data.candidate })
     })
@@ -141,12 +160,54 @@ export const setupSocketHandlers = (io: Server) => {
       try {
         const { roomId, uid } = socket.data
         if (roomId) {
+          // Notify remaining partner and add them to rematch queue
+          const roomSockets = await io.in(roomId).allSockets()
+          roomSockets.forEach(sockId => {
+            if (sockId !== socket.id) {
+              const waitingSock = io.sockets.sockets.get(sockId)
+              if (waitingSock && waitingSock.data.uid) {
+                const wUid = waitingSock.data.uid
+                const rematchTimeout = setTimeout(() => awaitingRematch.delete(wUid), 5 * 60 * 1000)
+                awaitingRematch.set(wUid, {
+                  socketId: sockId, uid: wUid,
+                  preferences: waitingSock.data.preferences || {},
+                  topic: waitingSock.data.topic || '',
+                  category: waitingSock.data.category || '',
+                  debateFormat: waitingSock.data.debateFormat || 'Text',
+                  timeout: rematchTimeout
+                })
+              }
+            }
+          })
           socket.to(roomId).emit('partner-left', { uid, timestamp: new Date().toISOString() })
           socket.leave(roomId)
           if (uid) await db.collection('users').doc(uid).update({ isSearching: false, lastActive: new Date() })
         }
+        // Remove leaving user from rematch queue
+        if (uid) { const entry = awaitingRematch.get(uid); if (entry) { clearTimeout(entry.timeout); awaitingRematch.delete(uid) } }
       } catch (error) {
         console.error('Error leaving debate room:', error)
+      }
+    })
+
+    // Handle rematch response from waiting user
+    socket.on('rematch-response', async (data: { accept: boolean; offeredUid: string }) => {
+      const { uid } = socket.data
+      if (!uid) return
+      awaitingRematch.delete(uid)
+      if (data.accept) {
+        // Both users get match-found — same topic/format as before
+        const myEntry = socket.data
+        socket.emit('rematch-confirmed', { matchedUid: data.offeredUid })
+        const theirSocketId = searchingUsers.get(data.offeredUid)
+        if (theirSocketId) {
+          io.to(theirSocketId).emit('rematch-confirmed', { matchedUid: uid })
+          searchingUsers.delete(data.offeredUid)
+        }
+      } else {
+        // Let the new user know the offer was declined so they continue searching
+        const theirSocketId = searchingUsers.get(data.offeredUid)
+        if (theirSocketId) io.to(theirSocketId).emit('rematch-declined')
       }
     })
 
@@ -164,25 +225,6 @@ export const setupSocketHandlers = (io: Server) => {
       }
     })
 
-    socket.on('timer-relay', (data: any) => {
-      const { roomId } = socket.data
-      if (roomId) socket.to(roomId).emit('timer-sync', data)
-    })
-
-    socket.on('timer-relay', (data: any) => {
-      const { roomId } = socket.data
-      if (roomId) socket.to(roomId).emit('timer-sync', data)
-    })
-
     socket.on('ping', () => socket.emit('pong', { timestamp: new Date().toISOString() }))
   })
 }
-
-
-
-
-
-
-
-
-

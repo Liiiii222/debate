@@ -2,7 +2,7 @@ import express, { Response } from 'express'
 import { db } from '../config/firebaseAdmin'
 import { authMiddleware, AuthenticatedRequest } from '../middleware/authMiddleware'
 import { validateUserPreferences } from '../middleware/validation'
-import { searchingUsers } from '../socket/handlers'
+import { searchingUsers, awaitingRematch } from '../socket/handlers'
 
 const router = express.Router()
 
@@ -117,6 +117,43 @@ router.post('/', authMiddleware, validateUserPreferences, async (req: Authentica
     await db.collection('users').doc(uid).set({
       uid, preferences, isSearching: true, lastActive: new Date()
     }, { merge: true })
+
+    // ── Check rematch queue first ─────────────────────────────────
+    for (const [waitingUid, waitingData] of awaitingRematch.entries()) {
+      if (waitingUid === uid) continue
+      if (waitingData.category !== preferences.category) continue
+      // Check basic compatibility
+      const waitingProfileDoc = await db.collection('users').doc(waitingUid).get()
+      const waitingProfile = waitingProfileDoc.exists ? waitingProfileDoc.data() : {}
+      if (
+        preferencesCompatibleWithProfile(preferences, waitingProfile) &&
+        preferencesCompatibleWithProfile(waitingData.preferences, myProfile)
+      ) {
+        const score = compatibilityScore(preferences, myProfile, waitingData.preferences, waitingProfile)
+        clearTimeout(waitingData.timeout)
+        awaitingRematch.delete(waitingUid)
+        // Fetch new user profile for the offer
+        const myName = (myProfile as any)?.name || (myProfile as any)?.displayName || 
+        const myPic = (myProfile as any)?.profilePicture || ''
+        // Notify waiting user of the offer
+        const io = (global as any).__io
+        if (io) {
+          io.to(waitingData.socketId).emit('quick-match-offer', {
+            offeredUid: uid,
+            name: myName,
+            profilePicture: myPic,
+            topic: waitingData.topic,
+            category: waitingData.category,
+            debateFormat: waitingData.debateFormat,
+            matchScore: score
+          })
+        }
+        // Track new user as searching so they can receive rematch-confirmed
+        const mySocketId = searchingUsers.get(uid)
+        res.json({ success: true, rematchPending: true, waitingUid, uid })
+        return
+      }
+    }
 
     const snap = await db.collection('users').where('isSearching', '==', true).get()
     const candidates = snap.docs

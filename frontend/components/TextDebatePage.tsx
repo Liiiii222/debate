@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
+import RematchOfferPopup from './RematchOfferPopup'
 import CountdownTimer, { TimerState } from './CountdownTimer'
 import {
   MagnifyingGlassIcon, PaperAirplaneIcon, ArrowLeftIcon,
@@ -44,6 +45,7 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
   const [showReport, setShowReport] = useState(false)
   const [replyingTo, setReplyingTo] = useState<{ id: string; text: string; sender: 'me' | 'partner' } | null>(null)
   const [timerBar, setTimerBar] = useState(false)
+  const [rematchOffer, setRematchOffer] = useState<any>(null)
   const [timerSyncedState, setTimerSyncedState] = useState<TimerState | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -94,6 +96,20 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     socket.on('partner-typing', (d: any) => setPartnerTyping(d.isTyping))
     socket.on('partner-left', () => { setPartnerPresent(false); setPartnerLeft(true) })
     socket.on('partner-disconnected', () => { setPartnerPresent(false); setPartnerLeft(true) })
+    socket.on('quick-match-offer', (data: any) => {
+      setRematchOffer(data)
+    })
+
+    socket.on('rematch-confirmed', (data: any) => {
+      // Reload with new partner — navigate to same format with new uid
+      window.location.href = window.location.href
+    })
+
+    socket.on('rematch-declined', () => {
+      // Offer was declined, continue normal search
+      setRematchOffer(null)
+    })
+
     socket.on('timer-sync', (state: TimerState) => {
       setTimerSyncedState(state)
       if (state.mode === 'running') setTimerBar(true)
@@ -140,6 +156,16 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
   const report = async (reason: string) => {
     if (!user || !matchedUid) return
     try { const t = await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` }, body: JSON.stringify({ reason }) }); setShowReport(false) } catch {}
+  }
+
+  const handleRematchAccept = (offeredUid: string) => {
+    setRematchOffer(null)
+    sock.current?.emit('rematch-response', { accept: true, offeredUid })
+  }
+
+  const handleRematchDecline = (offeredUid: string) => {
+    setRematchOffer(null)
+    sock.current?.emit('rematch-response', { accept: false, offeredUid })
   }
 
   const handleTimerStateChange = (state: TimerState) => { sock.current?.emit('timer-relay', state) }
