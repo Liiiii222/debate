@@ -253,9 +253,9 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
         </div>
         <div className="flex items-center gap-2">
           <button onClick={()=>{stream.current?.getAudioTracks().forEach(t=>{t.enabled=!mic});setMic(m=>!m)}} className={btn(!mic)} title={mic?'Mute':'Unmute'}>
-              <div className="relative">
+              <div className="relative w-4 h-4">
                 <MicrophoneIcon className="w-4 h-4"/>
-                {!mic && <span className="absolute inset-0 flex items-center justify-center text-xs font-bold leading-none" style={{fontSize:'13px',fontWeight:900}}>&#47;</span>}
+                {!mic && <svg className="absolute inset-0 w-4 h-4 text-current" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="3" x2="21" y2="21"/></svg>}
               </div>
             </button>
           <button onClick={()=>{setChatOpen(c=>!c);setFactOpen(false)}} className={btn(chatOpen)}>

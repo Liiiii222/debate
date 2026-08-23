@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import Link from 'next/link'
 import { UserPlusIcon, FlagIcon, ArrowLeftIcon } from '@heroicons/react/24/solid'
 
 function AvatarImg({ src, name, className = '' }: { src: string; name: string; className?: string }) {
@@ -30,6 +31,9 @@ export default function PublicProfilePage() {
   const [following, setFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
   const [showReport, setShowReport] = useState(false)
+  const [activeList, setActiveList] = useState<'none' | 'followers' | 'following'>('none')
+  const [listUsers, setListUsers] = useState<{uid:string;name:string;profilePicture:string;country:string}[]>([])
+  const [listLoading, setListLoading] = useState(false)
 
   useEffect(() => {
     if (!user || !uid) return
@@ -91,6 +95,20 @@ export default function PublicProfilePage() {
 
   // Check if this page was opened in a new tab (for debate context)
   const isNewTab = typeof window !== 'undefined' && window.opener !== null
+
+  const fetchList = async (type: 'followers' | 'following') => {
+    if (!user || !profile) return
+    if (activeList === type) { setActiveList('none'); return }
+    setActiveList(type); setListLoading(true); setListUsers([])
+    try {
+      const uids: string[] = type === 'followers' ? (profile.followers || []) : (profile.following || [])
+      const token = await user.getIdToken()
+      const results = await Promise.all(uids.map((u:string) =>
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${u}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+      ))
+      setListUsers(results.filter(r => r.success).map((r:any) => ({ uid: r.user.uid, name: r.user.name || 'Unknown', profilePicture: r.user.profilePicture || '', country: r.user.country || '' })))
+    } catch {} finally { setListLoading(false) }
+  }
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50">
@@ -163,16 +181,41 @@ export default function PublicProfilePage() {
           </div>
 
           {/* Stats */}
-          <div className="flex gap-8 mb-6 pb-6 border-b border-gray-100">
-            <div className="text-center">
+          <div className="flex gap-8 mb-4 pb-4 border-b border-gray-100">
+            <button onClick={() => fetchList('followers')}
+              className={'text-center transition-colors ' + (activeList === 'followers' ? 'text-primary-600' : 'hover:text-primary-600')}>
               <p className="text-xl font-bold text-gray-900">{profile?.followersCount ?? 0}</p>
               <p className="text-sm text-gray-400">Followers</p>
-            </div>
-            <div className="text-center">
+            </button>
+            <button onClick={() => fetchList('following')}
+              className={'text-center transition-colors ' + (activeList === 'following' ? 'text-primary-600' : 'hover:text-primary-600')}>
               <p className="text-xl font-bold text-gray-900">{profile?.followingCount ?? 0}</p>
               <p className="text-sm text-gray-400">Following</p>
-            </div>
+            </button>
           </div>
+
+          {/* Followers / Following list */}
+          {activeList !== 'none' && (
+            <div className="mb-4 pb-4 border-b border-gray-100">
+              <h3 className="text-sm font-medium text-gray-600 mb-3 capitalize">{activeList}</h3>
+              {listLoading && <p className="text-sm text-gray-400">Loading...</p>}
+              {!listLoading && listUsers.length === 0 && <p className="text-sm text-gray-400">No {activeList} yet.</p>}
+              <div className="space-y-3">
+                {listUsers.map(u => (
+                  <Link key={u.uid} href={'/profile/' + u.uid}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
+                      <AvatarImg src={u.profilePicture} name={u.name} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{u.name}</p>
+                      {u.country && <p className="text-xs text-gray-400">{u.country}</p>}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Bio */}
           {profile?.bio && (
