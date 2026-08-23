@@ -190,24 +190,29 @@ export const setupSocketHandlers = (io: Server) => {
       }
     })
 
-    // Handle rematch response from waiting user
-    socket.on('rematch-response', async (data: { accept: boolean; offeredUid: string }) => {
+    // Waiting user responds to a rematch offer
+    socket.on('rematch-response', (data: { accept: boolean; offeredUid: string; matchRoomId: string; debateFormats: string[] }) => {
       const { uid } = socket.data
       if (!uid) return
-      awaitingRematch.delete(uid)
+      const entry = awaitingRematch.get(uid)
+      if (entry) { clearTimeout(entry.timeout); awaitingRematch.delete(uid) }
+
       if (data.accept) {
-        // Both users get match-found — same topic/format as before
-        const myEntry = socket.data
-        socket.emit('rematch-confirmed', { matchedUid: data.offeredUid })
-        const theirSocketId = searchingUsers.get(data.offeredUid)
-        if (theirSocketId) {
-          io.to(theirSocketId).emit('rematch-confirmed', { matchedUid: uid })
-          searchingUsers.delete(data.offeredUid)
+        // Piggyback on existing accept-match infrastructure
+        socket.join(data.matchRoomId)
+        if (!roomAccepted.has(data.matchRoomId)) roomAccepted.set(data.matchRoomId, new Map())
+        roomAccepted.get(data.matchRoomId)!.set(uid, data.debateFormats || ['Text'])
+        const accepted = roomAccepted.get(data.matchRoomId)!
+        if (accepted.size >= 2) {
+          const allFormats = Array.from(accepted.values()).flat()
+          const resolved = allFormats.includes('Video') ? 'Video' : allFormats.includes('Voice') ? 'Voice' : 'Text'
+          roomAccepted.delete(data.matchRoomId)
+          io.in(data.matchRoomId).emit('both-accepted', { resolvedFormat: resolved })
         }
       } else {
-        // Let the new user know the offer was declined so they continue searching
-        const theirSocketId = searchingUsers.get(data.offeredUid)
-        if (theirSocketId) io.to(theirSocketId).emit('rematch-declined')
+        // Notify new user their offer was declined — they continue normal search
+        const newUserSocketId = searchingUsers.get(data.offeredUid)
+        if (newUserSocketId) io.to(newUserSocketId).emit('rematch-declined')
       }
     })
 

@@ -139,8 +139,8 @@ export default function Matchmaking({ userPreferences, onBack, onStartDebate }: 
           }
           setMatch(matchData)
           setPhase('confirming')
-          // Join the pre-debate room for Accept/Decline coordination
-          const roomId = makeRoomId(user.uid, data.match.id)
+          // For rematch, use server-provided matchRoomId; otherwise compute it
+          const roomId = data.match.matchRoomId || makeRoomId(user.uid, data.match.id)
           socketRef.current?.emit('join-match-room', { uid: user.uid, roomId })
           return
         }

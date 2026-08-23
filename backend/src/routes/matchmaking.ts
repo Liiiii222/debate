@@ -132,25 +132,55 @@ router.post('/', authMiddleware, validateUserPreferences, async (req: Authentica
         const score = compatibilityScore(preferences, myProfile, waitingData.preferences, waitingProfile)
         clearTimeout(waitingData.timeout)
         awaitingRematch.delete(waitingUid)
-        // Fetch new user profile for the offer
-        const myName = (myProfile as any)?.name || (myProfile as any)?.displayName || 
+
+        const myName = (myProfile as any)?.name || (myProfile as any)?.displayName || `Debater ${uid.slice(0,6)}`
         const myPic = (myProfile as any)?.profilePicture || ''
-        // Notify waiting user of the offer
+        const waitingName = (waitingProfile as any)?.name || (waitingProfile as any)?.displayName || `Debater ${waitingUid.slice(0,6)}`
+        const waitingPic = (waitingProfile as any)?.profilePicture || ''
+
+        // Resolve format: prefer waiting user format, intersect with new user prefs
+        const newFormats: string[] = preferences.debateFormats || []
+        const resolvedFormat = newFormats.includes(waitingData.debateFormat) || newFormats.length === 0
+          ? waitingData.debateFormat
+          : (newFormats[0] || 'Text')
+
+        const matchRoomId = [uid, waitingUid].sort().join('__match__')
+
         const io = (global as any).__io
         if (io) {
+          // Send offer to WAITING user (in debate room)
           io.to(waitingData.socketId).emit('quick-match-offer', {
             offeredUid: uid,
             name: myName,
             profilePicture: myPic,
             topic: waitingData.topic,
             category: waitingData.category,
-            debateFormat: waitingData.debateFormat,
-            matchScore: score
+            debateFormat: resolvedFormat,
+            matchScore: score,
+            matchRoomId
           })
         }
-        // Track new user as searching so they can receive rematch-confirmed
-        const mySocketId = searchingUsers.get(uid)
-        res.json({ success: true, rematchPending: true, waitingUid, uid })
+
+        await db.collection('users').doc(uid).update({ isSearching: false })
+
+        // Return match to NEW user — same format as normal match so Matchmaking component handles it
+        res.json({
+          success: true,
+          match: {
+            id: waitingUid,
+            name: waitingName,
+            ageRange: getAgeRange((waitingProfile as any)?.age) || 'Unknown',
+            country: (waitingProfile as any)?.country || 'Unknown',
+            languages: (waitingProfile as any)?.languages || [],
+            matchScore: score,
+            resolvedFormat,
+            topic: waitingData.topic,
+            category: waitingData.category,
+            matchRoomId,
+            isRematch: true
+          },
+          uid
+        })
         return
       }
     }
