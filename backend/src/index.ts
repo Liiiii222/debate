@@ -25,7 +25,7 @@ const io = new Server(httpServer, {
 
 setupSocketHandlers(io)
 
-app.use(cors({ origin: allowedOrigins, credentials: true }))
+app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
 app.use('/api/categories', categoriesRouter)
 app.use('/api/topics', topicsRouter)
@@ -44,4 +44,5 @@ const PORT = process.env.PORT || 3001
 httpServer.listen(PORT, () => {
   console.log(`Server + Socket.IO running on port ${PORT}`)
 })
+
 
