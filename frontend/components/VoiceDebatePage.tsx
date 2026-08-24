@@ -182,14 +182,19 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
     if (!user||!matchedUid) return
     try { const t=await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({reason})}); setShowReport(false) } catch {}
   }
-  const handleRematchAccept = (offeredUid: string) => {
+  const handleRematchAccept = (offer: RematchOffer) => {
     setRematchOffer(null)
-    sock.current?.emit('rematch-response', { accept: true, offeredUid })
+    sock.current?.emit('join-match-room', { uid: user?.uid, roomId: offer.matchRoomId })
+    setTimeout(() => {
+      sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Voice'] })
+    }, 300)
+  })
   }
 
-  const handleRematchDecline = (offeredUid: string) => {
+  const handleRematchDecline = (offer: RematchOffer) => {
     setRematchOffer(null)
-    sock.current?.emit('rematch-response', { accept: false, offeredUid })
+    sock.current?.emit('rematch-response', { accept: false, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: [] })
+  })
   }
 
   const handleTimerStateChange = (state:TimerState) => { sock.current?.emit('timer-relay',state) }
