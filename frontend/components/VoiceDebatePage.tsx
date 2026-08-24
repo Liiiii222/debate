@@ -194,7 +194,6 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
   const handleRematchDecline = (offer: RematchOffer) => {
     setRematchOffer(null)
     sock.current?.emit('rematch-response', { accept: false, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: [] })
-  })
   }
 
   const handleTimerStateChange = (state:TimerState) => { sock.current?.emit('timer-relay',state) }
