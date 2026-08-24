@@ -89,7 +89,7 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     const socket = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001', { transports: ['websocket'] })
     sock.current = socket
     const rid = matchedUid ? roomId(user.uid, matchedUid) : `${userPreferences?.category}-${userPreferences?.topic}`.toLowerCase().replace(/\s+/g, '-')
-    socket.on('connect', () => socket.emit('join-debate', { uid: user.uid, roomId: rid }))
+    socket.on('connect', () => socket.emit('join-debate', { uid: user.uid, roomId: rid, topic: userPreferences?.topic||'', category: userPreferences?.category||'', debateFormat: 'Text', preferences: userPreferences }))
     socket.on('partner-joined', () => { setPartnerPresent(true); setPartnerLeft(false) })
     socket.on('partner-already-present', () => { setPartnerPresent(true); setPartnerLeft(false) })
     socket.on('debate-message', (d: any) => setMsgs(p => [...p, { id: Math.random().toString(36), sender: 'partner', text: d.text, timestamp: d.timestamp, replyTo: d.replyTo }]))
