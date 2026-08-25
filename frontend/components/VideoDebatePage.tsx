@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
-import RematchOfferPopup from './RematchOfferPopup'
+import RematchOfferPopup, { RematchOffer } from './RematchOfferPopup'
 import CountdownTimer, { TimerState } from './CountdownTimer'
 import {
   MicrophoneIcon, VideoCameraIcon, VideoCameraSlashIcon,
@@ -42,7 +42,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
   const [chatIn, setChatIn] = useState('')
   const [partnerTyping, setPartnerTyping] = useState(false)
   const [timerBar, setTimerBar] = useState(false)
-  const [rematchOffer, setRematchOffer] = useState<any>(null)
+  const [rematchOffer, setRematchOffer] = useState<RematchOffer | null>(null)
   const [timerSyncedState, setTimerSyncedState] = useState<TimerState | null>(null)
   const [factService, setFactService] = useState<'wikipedia'|'perplexity'|'wolfram'>('wikipedia')
   const [factQ, setFactQ] = useState('')
