@@ -194,7 +194,6 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     setTimeout(() => {
       sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Video'] })
     }, 300)
-  })
   }
 
   const handleRematchDecline = (offer: RematchOffer) => {
@@ -385,4 +384,3 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     </div>
   )
 }
-

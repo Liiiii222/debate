@@ -164,7 +164,6 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     setTimeout(() => {
       sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Text'] })
     }, 300)
-  })
   }
 
   const handleRematchDecline = (offer: RematchOffer) => {
@@ -388,4 +387,3 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     </div>
   )
 }
-

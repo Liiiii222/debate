@@ -188,7 +188,6 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
     setTimeout(() => {
       sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Voice'] })
     }, 300)
-  })
   }
 
   const handleRematchDecline = (offer: RematchOffer) => {
@@ -371,4 +370,3 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
     </div>
   )
 }
-
