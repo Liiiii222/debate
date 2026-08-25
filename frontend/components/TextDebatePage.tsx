@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
-import RematchOfferPopup from './RematchOfferPopup'
+import RematchOfferPopup, { RematchOffer } from './RematchOfferPopup'
 import CountdownTimer, { TimerState } from './CountdownTimer'
 import {
   MagnifyingGlassIcon, PaperAirplaneIcon, ArrowLeftIcon,
@@ -45,7 +45,7 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
   const [showReport, setShowReport] = useState(false)
   const [replyingTo, setReplyingTo] = useState<{ id: string; text: string; sender: 'me' | 'partner' } | null>(null)
   const [timerBar, setTimerBar] = useState(false)
-  const [rematchOffer, setRematchOffer] = useState<any>(null)
+  const [rematchOffer, setRematchOffer] = useState<RematchOffer | null>(null)
   const [timerSyncedState, setTimerSyncedState] = useState<TimerState | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
