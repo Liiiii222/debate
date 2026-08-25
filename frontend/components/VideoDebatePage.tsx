@@ -364,6 +364,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
       {rematchOffer && (
         <RematchOfferPopup
           offer={rematchOffer}
+          myDebateFormats={userPreferences?.debateFormats || []}
           onAccept={handleRematchAccept}
           onDecline={handleRematchDecline}
         />

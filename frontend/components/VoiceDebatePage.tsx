@@ -350,6 +350,7 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
       {rematchOffer && (
         <RematchOfferPopup
           offer={rematchOffer}
+          myDebateFormats={userPreferences?.debateFormats || []}
           onAccept={handleRematchAccept}
           onDecline={handleRematchDecline}
         />
