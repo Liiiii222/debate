@@ -88,7 +88,7 @@ export const setupSocketHandlers = (io: Server) => {
     })
 
     // Called when both enter the actual debate room
-    socket.on('join-debate', async (data: { uid: string; roomId: string }) => {
+    socket.on('join-debate', async (data: { uid: string; roomId: string; topic?: string; category?: string; debateFormat?: string; preferences?: any }) => {
       try {
         const { uid, roomId } = data
         const wasEmpty = (await io.in(roomId).allSockets()).size === 0
@@ -233,3 +233,4 @@ export const setupSocketHandlers = (io: Server) => {
     socket.on('ping', () => socket.emit('pong', { timestamp: new Date().toISOString() }))
   })
 }
+
