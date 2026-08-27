@@ -153,6 +153,11 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
       setRematchOffer(data)
     })
 
+    socket.on('both-accepted', () => {
+      const pending = sessionStorage.getItem('_pendingRematch')
+      if (pending) window.location.href = '/'
+    })
+
     socket.on('rematch-confirmed', (data: any) => {
       // Reload with new partner — navigate to same format with new uid
       window.location.href = window.location.href
@@ -196,6 +201,13 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     try { const t=await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({reason})}); setShowReport(false) } catch {}
   }
   const handleRematchAccept = (offer: RematchOffer) => {
+    // Store so both-accepted can pick it up
+    sessionStorage.setItem('_pendingRematch', JSON.stringify({
+      matchedUid: offer.offeredUid,
+      format: offer.debateFormat,
+      topic: offer.topic,
+      category: offer.category
+    }))
     setRematchOffer(null)
     sock.current?.emit('join-match-room', { uid: user?.uid, roomId: offer.matchRoomId })
     setTimeout(() => {

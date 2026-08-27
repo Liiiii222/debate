@@ -28,6 +28,21 @@ export default function Home() {
   })
   const [matchedUid, setMatchedUid] = useState<string>('')
 
+  // Check for pending rematch from debate page navigation
+  useEffect(() => {
+    const pending = sessionStorage.getItem('_pendingRematch')
+    if (pending) {
+      try {
+        const d = JSON.parse(pending)
+        sessionStorage.removeItem('_pendingRematch')
+        setMatchedUid(d.matchedUid)
+        setUserPreferences(prev => ({ ...prev, topic: d.topic || prev.topic, category: d.category || prev.category, debateFormats: [d.format || 'Text'] }))
+        const step = d.format === 'Video' ? 'debate-video' : d.format === 'Voice' ? 'debate-voice' : 'debate-text'
+        setCurrentStep(step as AppStep)
+      } catch {}
+    }
+  }, [])
+
   const handleCategorySelect = (category: string) => {
     setUserPreferences(prev => ({ ...prev, category }))
     setCurrentStep('topics')
