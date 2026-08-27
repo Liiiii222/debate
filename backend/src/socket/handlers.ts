@@ -88,7 +88,7 @@ export const setupSocketHandlers = (io: Server) => {
     })
 
     // Called when both enter the actual debate room
-    socket.on('join-debate', async (data: { uid: string; roomId: string; topic?: string; category?: string; debateFormat?: string; preferences?: any }) => {
+    socket.on('join-debate', async (data: { uid: string; roomId: string }) => {
       try {
         const { uid, roomId } = data
         const wasEmpty = (await io.in(roomId).allSockets()).size === 0
@@ -160,34 +160,32 @@ export const setupSocketHandlers = (io: Server) => {
       try {
         const { roomId, uid } = socket.data
         if (roomId) {
-          // Notify remaining partner and add them to rematch queue
-          const roomSockets = await io.in(roomId).allSockets()
-          roomSockets.forEach(sockId => {
-            if (sockId !== socket.id) {
-              const waitingSock = io.sockets.sockets.get(sockId)
-              if (waitingSock && waitingSock.data.uid) {
-                const wUid = waitingSock.data.uid
-                const rematchTimeout = setTimeout(() => awaitingRematch.delete(wUid), 5 * 60 * 1000)
-                awaitingRematch.set(wUid, {
-                  socketId: sockId, uid: wUid,
-                  preferences: waitingSock.data.preferences || {},
-                  topic: waitingSock.data.topic || '',
-                  category: waitingSock.data.category || '',
-                  debateFormat: waitingSock.data.debateFormat || 'Text',
-                  timeout: rematchTimeout
-                })
-              }
-            }
-          })
           socket.to(roomId).emit('partner-left', { uid, timestamp: new Date().toISOString() })
           socket.leave(roomId)
           if (uid) await db.collection('users').doc(uid).update({ isSearching: false, lastActive: new Date() })
         }
-        // Remove leaving user from rematch queue
         if (uid) { const entry = awaitingRematch.get(uid); if (entry) { clearTimeout(entry.timeout); awaitingRematch.delete(uid) } }
       } catch (error) {
         console.error('Error leaving debate room:', error)
       }
+    })
+
+    // Client emits this when their partner leaves — registers them for rematch
+    socket.on('enter-rematch-queue', (data: { topic: string; category: string; debateFormat: string; preferences: any }) => {
+      const { uid } = socket.data
+      if (!uid) return
+      const existing = awaitingRematch.get(uid)
+      if (existing) clearTimeout(existing.timeout)
+      const timeout = setTimeout(() => awaitingRematch.delete(uid), 5 * 60 * 1000)
+      awaitingRematch.set(uid, {
+        socketId: socket.id, uid,
+        preferences: data.preferences || {},
+        topic: data.topic || '',
+        category: data.category || '',
+        debateFormat: data.debateFormat || 'Text',
+        timeout
+      })
+      console.log('[rematch] queued:', uid, data.category, data.topic)
     })
 
     // Waiting user responds to a rematch offer
@@ -233,4 +231,3 @@ export const setupSocketHandlers = (io: Server) => {
     socket.on('ping', () => socket.emit('pong', { timestamp: new Date().toISOString() }))
   })
 }
-

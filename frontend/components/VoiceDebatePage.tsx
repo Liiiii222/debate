@@ -131,7 +131,14 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
     socket.on('webrtc-ice-candidate', async ({candidate}:any) => { try { await pc.current?.addIceCandidate(new RTCIceCandidate(candidate)) } catch {} })
     socket.on('partner-typing', (d:any) => setPartnerSpeaking(d.isTyping))
     socket.on('debate-message', (d:any) => setMsgs(p=>[...p,{id:Math.random().toString(36),sender:'partner',text:d.text,timestamp:d.timestamp}]))
-    socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true);pc.current?.close() })
+    socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true)
+      // Auto-register for rematch
+      socket.emit('enter-rematch-queue', {
+        topic: userPreferences?.topic || '',
+        category: userPreferences?.category || '',
+        debateFormat: 'Voice',
+        preferences: userPreferences
+      });pc.current?.close() })
     socket.on('partner-disconnected', () => { setPartnerPresent(false);setPartnerLeft(true);pc.current?.close() })
     socket.on('quick-match-offer', (data: any) => {
       setRematchOffer(data)

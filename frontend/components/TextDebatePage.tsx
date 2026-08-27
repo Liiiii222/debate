@@ -94,7 +94,13 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     socket.on('partner-already-present', () => { setPartnerPresent(true); setPartnerLeft(false) })
     socket.on('debate-message', (d: any) => setMsgs(p => [...p, { id: Math.random().toString(36), sender: 'partner', text: d.text, timestamp: d.timestamp, replyTo: d.replyTo }]))
     socket.on('partner-typing', (d: any) => setPartnerTyping(d.isTyping))
-    socket.on('partner-left', () => { setPartnerPresent(false); setPartnerLeft(true) })
+    socket.on('partner-left', () => { setPartnerPresent(false); setPartnerLeft(true)
+      socket.emit('enter-rematch-queue', {
+        topic: userPreferences?.topic || '',
+        category: userPreferences?.category || '',
+        debateFormat: 'Text',
+        preferences: userPreferences
+      }) })
     socket.on('partner-disconnected', () => { setPartnerPresent(false); setPartnerLeft(true) })
     socket.on('quick-match-offer', (data: any) => {
       setRematchOffer(data)

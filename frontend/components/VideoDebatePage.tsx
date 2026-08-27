@@ -140,7 +140,14 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     socket.on('webrtc-ice-candidate', async ({candidate}:any) => { try { await pc.current?.addIceCandidate(new RTCIceCandidate(candidate)) } catch {} })
     socket.on('partner-typing', (d:any) => setPartnerSpeaking(d.isTyping))
     socket.on('debate-message', (d:any) => setMsgs(p=>[...p,{id:Math.random().toString(36),sender:'partner',text:d.text,timestamp:d.timestamp}]))
-    socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();pc.current=null;if(partnerVid.current)partnerVid.current.srcObject=null })
+    socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true)
+      // Auto-register for rematch
+      socket.emit('enter-rematch-queue', {
+        topic: userPreferences?.topic || '',
+        category: userPreferences?.category || '',
+        debateFormat: 'Video',
+        preferences: userPreferences
+      });setConnState('idle');pc.current?.close();pc.current=null;if(partnerVid.current)partnerVid.current.srcObject=null })
     socket.on('partner-disconnected', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();if(partnerVid.current)partnerVid.current.srcObject=null })
     socket.on('quick-match-offer', (data: any) => {
       setRematchOffer(data)
