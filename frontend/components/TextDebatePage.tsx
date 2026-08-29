@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
-import RematchOfferPopup, { RematchOffer } from './RematchOfferPopup'
 import CountdownTimer, { TimerState } from './CountdownTimer'
 import {
   MagnifyingGlassIcon, PaperAirplaneIcon, ArrowLeftIcon,
@@ -45,7 +44,6 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
   const [showReport, setShowReport] = useState(false)
   const [replyingTo, setReplyingTo] = useState<{ id: string; text: string; sender: 'me' | 'partner' } | null>(null)
   const [timerBar, setTimerBar] = useState(false)
-  const [rematchOffer, setRematchOffer] = useState<RematchOffer | null>(null)
   const [timerSyncedState, setTimerSyncedState] = useState<TimerState | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -95,30 +93,9 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     socket.on('debate-message', (d: any) => setMsgs(p => [...p, { id: Math.random().toString(36), sender: 'partner', text: d.text, timestamp: d.timestamp, replyTo: d.replyTo }]))
     socket.on('partner-typing', (d: any) => setPartnerTyping(d.isTyping))
     socket.on('partner-left', () => { setPartnerPresent(false); setPartnerLeft(true)
-      socket.emit('enter-rematch-queue', {
-        topic: userPreferences?.topic || '',
-        category: userPreferences?.category || '',
-        debateFormat: 'Text',
-        preferences: userPreferences
-      }) })
     socket.on('partner-disconnected', () => { setPartnerPresent(false); setPartnerLeft(true) })
     socket.on('quick-match-offer', (data: any) => {
       setRematchOffer(data)
-    })
-
-    socket.on('both-accepted', () => {
-      const pending = sessionStorage.getItem('_pendingRematch')
-      if (pending) window.location.href = '/'
-    })
-
-    socket.on('rematch-confirmed', (data: any) => {
-      // Reload with new partner — navigate to same format with new uid
-      window.location.href = window.location.href
-    })
-
-    socket.on('rematch-declined', () => {
-      // Offer was declined, continue normal search
-      setRematchOffer(null)
     })
 
     socket.on('timer-sync', (state: TimerState) => {
@@ -167,26 +144,6 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
   const report = async (reason: string) => {
     if (!user || !matchedUid) return
     try { const t = await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` }, body: JSON.stringify({ reason }) }); setShowReport(false) } catch {}
-  }
-
-  const handleRematchAccept = (offer: RematchOffer) => {
-    // Store so both-accepted can pick it up
-    sessionStorage.setItem('_pendingRematch', JSON.stringify({
-      matchedUid: offer.offeredUid,
-      format: offer.debateFormat,
-      topic: offer.topic,
-      category: offer.category
-    }))
-    setRematchOffer(null)
-    sock.current?.emit('join-match-room', { uid: user?.uid, roomId: offer.matchRoomId })
-    setTimeout(() => {
-      sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Text'] })
-    }, 300)
-  }
-
-  const handleRematchDecline = (offer: RematchOffer) => {
-    setRematchOffer(null)
-    sock.current?.emit('rematch-response', { accept: false, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: [] })
   }
 
   const handleTimerStateChange = (state: TimerState) => { sock.current?.emit('timer-relay', state) }

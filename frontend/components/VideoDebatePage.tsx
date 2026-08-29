@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
-import RematchOfferPopup, { RematchOffer } from './RematchOfferPopup'
 import CountdownTimer, { TimerState } from './CountdownTimer'
 import {
   MicrophoneIcon, VideoCameraIcon, VideoCameraSlashIcon,
@@ -42,7 +41,6 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
   const [chatIn, setChatIn] = useState('')
   const [partnerTyping, setPartnerTyping] = useState(false)
   const [timerBar, setTimerBar] = useState(false)
-  const [rematchOffer, setRematchOffer] = useState<RematchOffer | null>(null)
   const [timerSyncedState, setTimerSyncedState] = useState<TimerState | null>(null)
   const [factService, setFactService] = useState<'wikipedia'|'perplexity'|'wolfram'>('wikipedia')
   const [factQ, setFactQ] = useState('')
@@ -141,31 +139,9 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     socket.on('partner-typing', (d:any) => setPartnerSpeaking(d.isTyping))
     socket.on('debate-message', (d:any) => setMsgs(p=>[...p,{id:Math.random().toString(36),sender:'partner',text:d.text,timestamp:d.timestamp}]))
     socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true)
-      // Auto-register for rematch
-      socket.emit('enter-rematch-queue', {
-        topic: userPreferences?.topic || '',
-        category: userPreferences?.category || '',
-        debateFormat: 'Video',
-        preferences: userPreferences
-      });setConnState('idle');pc.current?.close();pc.current=null;if(partnerVid.current)partnerVid.current.srcObject=null })
     socket.on('partner-disconnected', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();if(partnerVid.current)partnerVid.current.srcObject=null })
     socket.on('quick-match-offer', (data: any) => {
       setRematchOffer(data)
-    })
-
-    socket.on('both-accepted', () => {
-      const pending = sessionStorage.getItem('_pendingRematch')
-      if (pending) window.location.href = '/'
-    })
-
-    socket.on('rematch-confirmed', (data: any) => {
-      // Reload with new partner — navigate to same format with new uid
-      window.location.href = window.location.href
-    })
-
-    socket.on('rematch-declined', () => {
-      // Offer was declined, continue normal search
-      setRematchOffer(null)
     })
 
     socket.on('timer-sync', (state:TimerState) => { setTimerSyncedState(state); if(state.mode==='running')setTimerBar(true); else if(state.mode==='setup')setTimerBar(false) })
@@ -202,14 +178,6 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
   }
   const handleRematchAccept = (offer: RematchOffer) => {
     // Store so both-accepted can pick it up
-    sessionStorage.setItem('_pendingRematch', JSON.stringify({
-      matchedUid: offer.offeredUid,
-      format: offer.debateFormat,
-      topic: offer.topic,
-      category: offer.category
-    }))
-    setRematchOffer(null)
-    sock.current?.emit('join-match-room', { uid: user?.uid, roomId: offer.matchRoomId })
     setTimeout(() => {
       sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Video'] })
     }, 300)

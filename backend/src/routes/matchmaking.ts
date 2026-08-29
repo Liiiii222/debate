@@ -2,7 +2,7 @@ import express, { Response } from 'express'
 import { db } from '../config/firebaseAdmin'
 import { authMiddleware, AuthenticatedRequest } from '../middleware/authMiddleware'
 import { validateUserPreferences } from '../middleware/validation'
-import { searchingUsers, awaitingRematch } from '../socket/handlers'
+import { searchingUsers } from '../socket/handlers'
 
 const router = express.Router()
 
@@ -118,70 +118,6 @@ router.post('/', authMiddleware, validateUserPreferences, async (req: Authentica
       uid, preferences, isSearching: true, lastActive: new Date()
     }, { merge: true })
 
-    // ── Check rematch queue first ─────────────────────────────────
-    for (const [waitingUid, waitingData] of awaitingRematch.entries()) {
-      if (waitingUid === uid) continue
-      if (waitingData.category !== preferences.category) continue
-      // Check basic compatibility
-      const waitingProfileDoc = await db.collection('users').doc(waitingUid).get()
-      const waitingProfile = waitingProfileDoc.exists ? waitingProfileDoc.data() : {}
-      if (
-        preferencesCompatibleWithProfile(preferences, waitingProfile) &&
-        preferencesCompatibleWithProfile(waitingData.preferences, myProfile)
-      ) {
-        const score = compatibilityScore(preferences, myProfile, waitingData.preferences, waitingProfile)
-        clearTimeout(waitingData.timeout)
-        awaitingRematch.delete(waitingUid)
-
-        const myName = (myProfile as any)?.name || (myProfile as any)?.displayName || `Debater ${uid.slice(0,6)}`
-        const myPic = (myProfile as any)?.profilePicture || ''
-        const waitingName = (waitingProfile as any)?.name || (waitingProfile as any)?.displayName || `Debater ${waitingUid.slice(0,6)}`
-        const waitingPic = (waitingProfile as any)?.profilePicture || ''
-
-        // Resolve format: prefer waiting user format, intersect with new user prefs
-        const newFormats: string[] = preferences.debateFormats || []
-        const resolvedFormat = newFormats.includes(waitingData.debateFormat) || newFormats.length === 0
-          ? waitingData.debateFormat
-          : (newFormats[0] || 'Text')
-
-        const matchRoomId = [uid, waitingUid].sort().join('__match__')
-
-        const io = (global as any).__io
-        if (io) {
-          // Send offer to WAITING user (in debate room)
-          io.to(waitingData.socketId).emit('quick-match-offer', {
-            offeredUid: uid,
-            name: myName,
-            profilePicture: myPic,
-            topic: waitingData.topic,
-            category: waitingData.category,
-            debateFormat: resolvedFormat,
-            matchScore: score,
-            matchRoomId
-          })
-        }
-
-        await db.collection('users').doc(uid).update({ isSearching: false })
-
-        // Return match to NEW user — same format as normal match so Matchmaking component handles it
-        res.json({
-          success: true,
-          match: {
-            id: waitingUid,
-            name: waitingName,
-            ageRange: getAgeRange((waitingProfile as any)?.age) || 'Unknown',
-            country: (waitingProfile as any)?.country || 'Unknown',
-            languages: (waitingProfile as any)?.languages || [],
-            matchScore: score,
-            resolvedFormat,
-            topic: waitingData.topic,
-            category: waitingData.category,
-            matchRoomId,
-            isRematch: true
-          },
-          uid
-        })
-        return
       }
     }
 

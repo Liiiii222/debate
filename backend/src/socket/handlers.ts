@@ -4,17 +4,6 @@ import { db } from '../config/firebaseAdmin'
 // Map from Firebase uid → socket.id so matchmaking can push to specific users
 export const searchingUsers = new Map<string, string>()
 
-// Rematch queue: users whose partner left, waiting for a new one
-export const awaitingRematch = new Map<string, {
-  socketId: string
-  uid: string
-  preferences: any
-  topic: string
-  category: string
-  debateFormat: string
-  timeout: NodeJS.Timeout
-}>()
-
 // Track which rooms have accepted — roomId → Map of uid → their debateFormats
 const roomAccepted = new Map<string, Map<string, string[]>>()
 
@@ -167,50 +156,6 @@ export const setupSocketHandlers = (io: Server) => {
         if (uid) { const entry = awaitingRematch.get(uid); if (entry) { clearTimeout(entry.timeout); awaitingRematch.delete(uid) } }
       } catch (error) {
         console.error('Error leaving debate room:', error)
-      }
-    })
-
-    // Client emits this when their partner leaves — registers them for rematch
-    socket.on('enter-rematch-queue', (data: { topic: string; category: string; debateFormat: string; preferences: any }) => {
-      const { uid } = socket.data
-      if (!uid) return
-      const existing = awaitingRematch.get(uid)
-      if (existing) clearTimeout(existing.timeout)
-      const timeout = setTimeout(() => awaitingRematch.delete(uid), 5 * 60 * 1000)
-      awaitingRematch.set(uid, {
-        socketId: socket.id, uid,
-        preferences: data.preferences || {},
-        topic: data.topic || '',
-        category: data.category || '',
-        debateFormat: data.debateFormat || 'Text',
-        timeout
-      })
-      console.log('[rematch] queued:', uid, data.category, data.topic)
-    })
-
-    // Waiting user responds to a rematch offer
-    socket.on('rematch-response', (data: { accept: boolean; offeredUid: string; matchRoomId: string; debateFormats: string[] }) => {
-      const { uid } = socket.data
-      if (!uid) return
-      const entry = awaitingRematch.get(uid)
-      if (entry) { clearTimeout(entry.timeout); awaitingRematch.delete(uid) }
-
-      if (data.accept) {
-        // Piggyback on existing accept-match infrastructure
-        socket.join(data.matchRoomId)
-        if (!roomAccepted.has(data.matchRoomId)) roomAccepted.set(data.matchRoomId, new Map())
-        roomAccepted.get(data.matchRoomId)!.set(uid, data.debateFormats || ['Text'])
-        const accepted = roomAccepted.get(data.matchRoomId)!
-        if (accepted.size >= 2) {
-          const allFormats = Array.from(accepted.values()).flat()
-          const resolved = allFormats.includes('Video') ? 'Video' : allFormats.includes('Voice') ? 'Voice' : 'Text'
-          roomAccepted.delete(data.matchRoomId)
-          io.in(data.matchRoomId).emit('both-accepted', { resolvedFormat: resolved })
-        }
-      } else {
-        // Notify new user their offer was declined — they continue normal search
-        const newUserSocketId = searchingUsers.get(data.offeredUid)
-        if (newUserSocketId) io.to(newUserSocketId).emit('rematch-declined')
       }
     })
 
