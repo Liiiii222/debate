@@ -129,12 +129,8 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
     socket.on('webrtc-ice-candidate', async ({candidate}:any) => { try { await pc.current?.addIceCandidate(new RTCIceCandidate(candidate)) } catch {} })
     socket.on('partner-typing', (d:any) => setPartnerSpeaking(d.isTyping))
     socket.on('debate-message', (d:any) => setMsgs(p=>[...p,{id:Math.random().toString(36),sender:'partner',text:d.text,timestamp:d.timestamp}]))
-    socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true)
+    socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true);pc.current?.close() })
     socket.on('partner-disconnected', () => { setPartnerPresent(false);setPartnerLeft(true);pc.current?.close() })
-    socket.on('quick-match-offer', (data: any) => {
-      setRematchOffer(data)
-    })
-
     socket.on('timer-sync', (state:TimerState) => { setTimerSyncedState(state); if(state.mode==='running')setTimerBar(true); else if(state.mode==='setup')setTimerBar(false) })
 
     return () => {
@@ -170,18 +166,6 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
     if (!user||!matchedUid) return
     try { const t=await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({reason})}); setShowReport(false) } catch {}
   }
-  const handleRematchAccept = (offer: RematchOffer) => {
-    // Store so both-accepted can pick it up
-    setTimeout(() => {
-      sock.current?.emit('rematch-response', { accept: true, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: userPreferences?.debateFormats || ['Voice'] })
-    }, 300)
-  }
-
-  const handleRematchDecline = (offer: RematchOffer) => {
-    setRematchOffer(null)
-    sock.current?.emit('rematch-response', { accept: false, offeredUid: offer.offeredUid, matchRoomId: offer.matchRoomId, debateFormats: [] })
-  }
-
   const handleTimerStateChange = (state:TimerState) => { sock.current?.emit('timer-relay',state) }
 
   const boxStyle = (stacked:boolean):React.CSSProperties => ({
@@ -334,13 +318,6 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
           </div>
         </div>
       )}
-      {rematchOffer && (
-        <RematchOfferPopup
-          offer={rematchOffer}
-          myDebateFormats={userPreferences?.debateFormats || []}
-          onAccept={handleRematchAccept}
-          onDecline={handleRematchDecline}
-        />
       )}
 
       {showEnd&&(

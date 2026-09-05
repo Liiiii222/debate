@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+
 import { io, Socket } from 'socket.io-client'
 import { useAuth } from '@/contexts/AuthContext'
 import CountdownTimer, { TimerState } from './CountdownTimer'
@@ -40,7 +40,6 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
   const [input, setInput] = useState('')
   const [partnerTyping, setPartnerTyping] = useState(false)
   const [partnerProfile, setPartnerProfile] = useState<any>(null)
-  const [following, setFollowing] = useState(false)
   const [showReport, setShowReport] = useState(false)
   const [replyingTo, setReplyingTo] = useState<{ id: string; text: string; sender: 'me' | 'partner' } | null>(null)
   const [timerBar, setTimerBar] = useState(false)
@@ -76,7 +75,7 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
       try {
         const t = await user.getIdToken()
         const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}`, { headers: { Authorization: `Bearer ${t}` } })
-        if (res.ok) { const d = await res.json(); setPartnerProfile(d.user); setFollowing(d.user?.isFollowedByMe || false) }
+        if (res.ok) { const d = await res.json(); setPartnerProfile(d.user) }
       } catch {}
     }
     fetch_()
@@ -92,11 +91,8 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     socket.on('partner-already-present', () => { setPartnerPresent(true); setPartnerLeft(false) })
     socket.on('debate-message', (d: any) => setMsgs(p => [...p, { id: Math.random().toString(36), sender: 'partner', text: d.text, timestamp: d.timestamp, replyTo: d.replyTo }]))
     socket.on('partner-typing', (d: any) => setPartnerTyping(d.isTyping))
-    socket.on('partner-left', () => { setPartnerPresent(false); setPartnerLeft(true)
+    socket.on('partner-left', () => { setPartnerPresent(false); setPartnerLeft(true) })
     socket.on('partner-disconnected', () => { setPartnerPresent(false); setPartnerLeft(true) })
-    socket.on('quick-match-offer', (data: any) => {
-      setRematchOffer(data)
-    })
 
     socket.on('timer-sync', (state: TimerState) => {
       setTimerSyncedState(state)
@@ -136,12 +132,7 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     setFactLoading(false)
   }
 
-  const follow = async () => {
-    if (!user || !matchedUid) return
-    try { const t = await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/follow`, { method: 'POST', headers: { Authorization: `Bearer ${t}` } }); setFollowing(true) } catch {}
-  }
-
-  const report = async (reason: string) => {
+const report = async (reason: string) => {
     if (!user || !matchedUid) return
     try { const t = await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` }, body: JSON.stringify({ reason }) }); setShowReport(false) } catch {}
   }
@@ -362,3 +353,7 @@ export default function TextDebatePage({ userPreferences, matchedUid }: TextDeba
     </div>
   )
 }
+
+
+
+
