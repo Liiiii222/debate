@@ -323,7 +323,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
         </div>
       )}
 
-      {/* End modal */}
+
       )}
 
       {showEnd&&(
