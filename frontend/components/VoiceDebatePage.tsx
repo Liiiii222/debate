@@ -318,7 +318,7 @@ export default function VoiceDebatePage({ userPreferences, matchedUid }: VoiceDe
           </div>
         </div>
       )}
-      )}
+
 
       {showEnd&&(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
