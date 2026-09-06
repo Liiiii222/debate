@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
@@ -117,7 +117,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
       return p
     }
 
-    socket.on('connect', () => socket.emit('join-debate',{uid:user.uid,roomId:rid,topic:userPreferences?.topic||'',category:userPreferences?.category||'',debateFormat:'Video',preferences:userPreferences}))
+    socket.on('connect', () => socket.emit('join-debate',{uid:user.uid,roomId:rid}))
     socket.on('partner-joined', async () => {
       setPartnerPresent(true); setPartnerLeft(false)
       let w=0; while(!stream.current&&w<8000){await new Promise(r=>setTimeout(r,100));w+=100}
@@ -139,6 +139,12 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     socket.on('partner-typing', (d:any) => setPartnerSpeaking(d.isTyping))
     socket.on('debate-message', (d:any) => setMsgs(p=>[...p,{id:Math.random().toString(36),sender:'partner',text:d.text,timestamp:d.timestamp}]))
     socket.on('partner-left', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();pc.current=null;if(partnerVid.current)partnerVid.current.srcObject=null })
+    socket.on('partner-disconnected', () => { setPartnerPresent(false);setPartnerLeft(true);setConnState('idle');pc.current?.close();if(partnerVid.current)partnerVid.current.srcObject=null })
+    socket.on('timer-sync', (state:TimerState) => { setTimerSyncedState(state); if(state.mode==='running')setTimerBar(true); else if(state.mode==='setup')setTimerBar(false) })
+
+    return () => { socket.emit('leave-debate');socket.disconnect();pc.current?.close() }
+  }, [user, matchedUid])
+
   const send = () => {
     if (!chatIn.trim()||!sock.current) return
     sock.current.emit('debate-message',{text:chatIn,timestamp:Date.now()})
@@ -162,8 +168,10 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
     } catch {}
     setFactLoading(false)
   }
-
-
+  const handleReport = async (reason:string) => {
+    if (!user||!matchedUid) return
+    try { const t=await user.getIdToken(); await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/users/${matchedUid}/report`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({reason})}); setShowReport(false) } catch {}
+  }
   const handleTimerStateChange = (state:TimerState) => { sock.current?.emit('timer-relay',state) }
   const end = () => { sock.current?.emit('leave-debate'); window.location.href='/' }
 
@@ -225,7 +233,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
             <button onClick={()=>setChatOpen(false)} className="text-gray-400 hover:text-gray-600"><XMarkIcon className="w-4 h-4"/></button>
           </div>
           <div className="px-4 py-1.5 border-b border-gray-100 flex-shrink-0">
-            <span className="text-xs text-gray-400">{userPreferences?.topic} -? {userPreferences?.category}</span>
+            <span className="text-xs text-gray-400">{userPreferences?.topic} ┬À {userPreferences?.category}</span>
           </div>
           <div ref={chatLog} className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50 min-h-0">
             {msgs.length===0&&<div className="text-center text-gray-300 text-xs mt-8">No messages yet</div>}
@@ -282,7 +290,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
               {(['wikipedia','perplexity','wolfram'] as const).map(s=>(
                 <button key={s} onClick={()=>setFactService(s)}
                   className={`flex-1 py-1 rounded-md text-xs font-medium transition-all capitalize ${factService===s?'bg-white text-gray-900 shadow-sm':'text-gray-500 hover:text-gray-700'}`}>
-                  {s==='wolfram'?'Wolfram +?':s.charAt(0).toUpperCase()+s.slice(1)}
+                  {s==='wolfram'?'Wolfram ╬▒':s.charAt(0).toUpperCase()+s.slice(1)}
                 </button>
               ))}
             </div>
@@ -291,7 +299,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
                 placeholder={factService==='wikipedia'?'Search Wikipedia...':factService==='perplexity'?'Ask Perplexity...':'Ask Wolfram...'}
                 value={factQ} onChange={e=>setFactQ(e.target.value)} onKeyDown={e=>e.key==='Enter'&&factSearch()} autoFocus/>
               <button onClick={factSearch} className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-700 text-white text-xs font-medium flex-shrink-0">
-                {factService==='wikipedia'?'Search':'??? Open'}
+                {factService==='wikipedia'?'Search':'Ôåù Open'}
               </button>
             </div>
           </div>
@@ -323,9 +331,7 @@ export default function VideoDebatePage({ userPreferences, matchedUid }: VideoDe
         </div>
       )}
 
-
-      )}
-
+      {/* End modal */}
       {showEnd&&(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-8 max-w-sm w-full text-center shadow-xl border border-gray-100 mx-4">
