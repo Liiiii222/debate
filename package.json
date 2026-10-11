@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "firebase": "^11.9.1",
-    "firebase-admin": "^13.4.0",
+    "firebase-admin": "^13.10.0",
     "openai": "^5.7.0"
   }
 }
